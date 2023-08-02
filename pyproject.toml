@@ -17,6 +17,9 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
+    'h5py',
+    'imageio_ffmpeg',
+    'numpy',
 ]
 
 [project.optional-dependencies]
