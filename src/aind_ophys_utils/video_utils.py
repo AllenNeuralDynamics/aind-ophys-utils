@@ -6,12 +6,14 @@ import numpy as np
 
 from .array_utils import downsample_array
 
+
 def downsample_h5_video(
-        video_path: Path,
-        input_fps: float = 31.0,
-        output_fps: float = 4.0,
-        strategy: str = 'average',
-        random_seed: int = 0) -> np.ndarray:
+    video_path: Path,
+    input_fps: float = 31.0,
+    output_fps: float = 4.0,
+    strategy: str = "average",
+    random_seed: int = 0,
+) -> np.ndarray:
     """Opens an h5 file and downsamples dataset 'data'
     along axis=0
 
@@ -36,18 +38,21 @@ def downsample_h5_video(
         video_out: numpy.ndarray
             array downsampled along axis=0
     """
-    with h5py.File(video_path, 'r') as h5f:
+    with h5py.File(video_path, "r") as h5f:
         video_out = downsample_array(
-                h5f['data'],
-                input_fps,
-                output_fps,
-                strategy,
-                random_seed)
+            h5f["data"], input_fps, output_fps, strategy, random_seed
+        )
     return video_out
 
 
-def encode_video(video: np.ndarray, output_path: str,
-                 fps: float, bitrate: str = "0", crf: int = 20, cpu_used: int = 4) -> str:
+def encode_video(
+    video: np.ndarray,
+    output_path: str,
+    fps: float,
+    bitrate: str = "0",
+    crf: int = 20,
+    cpu_used: int = 4,
+) -> str:
     """Encode a video with vp9 codec via imageio-ffmpeg
 
     Parameters
@@ -80,14 +85,23 @@ def encode_video(video: np.ndarray, output_path: str,
     # ffmpeg expects video shape in terms of: (width, height)
     video_shape = (video[0].shape[1], video[0].shape[0])
 
-    writer = mpg.write_frames(output_path,
-                              video_shape,
-                              pix_fmt_in="gray8",
-                              pix_fmt_out="yuv420p",
-                              codec="libvpx-vp9",
-                              fps=fps,
-                              bitrate=bitrate,
-                              output_params=["-crf", str(crf), "-row-mt", "1", "-cpu-used", str(cpu_used)])
+    writer = mpg.write_frames(
+        output_path,
+        video_shape,
+        pix_fmt_in="gray8",
+        pix_fmt_out="yuv420p",
+        codec="libvpx-vp9",
+        fps=fps,
+        bitrate=bitrate,
+        output_params=[
+            "-crf",
+            str(crf),
+            "-row-mt",
+            "1",
+            "-cpu-used",
+            str(cpu_used),
+        ],
+    )
 
     writer.send(None)  # Seed ffmpeg-imageio writer generator
     for frame in video:

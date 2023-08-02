@@ -5,8 +5,8 @@ import numpy as np
 
 
 def n_frames_from_hz(
-        input_frame_rate: float,
-        downsampled_frame_rate: float) -> int:
+    input_frame_rate: float, downsampled_frame_rate: float
+) -> int:
     """
     Find the number of frames to group together to downsample
     a video from input_frame_rate to downsampled_frame_rate
@@ -26,17 +26,18 @@ def n_frames_from_hz(
     If input_frame_rate/downsampled_frame_rate < 1, will return 1
     """
 
-    frames_to_group = np.round(input_frame_rate/downsampled_frame_rate)
+    frames_to_group = np.round(input_frame_rate / downsampled_frame_rate)
     frames_to_group = frames_to_group.astype(int)
     return max(1, frames_to_group)
 
 
 def downsample_array(
-        array: Union[h5py.Dataset, np.ndarray],
-        input_fps: float = 31.0,
-        output_fps: float = 4.0,
-        strategy: str = 'average',
-        random_seed: int = 0) -> np.ndarray:
+    array: Union[h5py.Dataset, np.ndarray],
+    input_fps: float = 31.0,
+    output_fps: float = 4.0,
+    strategy: str = "average",
+    random_seed: int = 0,
+) -> np.ndarray:
     """Downsamples an array-like object along axis=0
 
     Parameters
@@ -59,41 +60,41 @@ def downsample_array(
             array downsampled along axis=0
     """
     if output_fps > input_fps:
-        raise ValueError('Output FPS cannot be greater than input FPS')
-    if (strategy == 'maximum') & (len(array.shape) > 1):
+        raise ValueError("Output FPS cannot be greater than input FPS")
+    if (strategy == "maximum") & (len(array.shape) > 1):
         raise ValueError("downsampling with strategy 'maximum' is not defined")
 
     npts_in = array.shape[0]
     frames_to_group = n_frames_from_hz(input_fps, output_fps)
-    npts_out = max(1, np.ceil(npts_in/frames_to_group).astype(int))
+    npts_out = max(1, np.ceil(npts_in / frames_to_group).astype(int))
 
     array_out = np.zeros((npts_out, *array.shape[1:]))
 
-    if strategy == 'random':
+    if strategy == "random":
         rng = np.random.default_rng(random_seed)
 
     sampling_strategies = {
-            'random': lambda arr, idx: arr[rng.choice(idx)],
-            'maximum': lambda arr, idx: arr[idx].max(axis=0),
-            'average': lambda arr, idx: arr[idx].mean(axis=0),
-            'first': lambda arr, idx: arr[idx[0]],
-            'last': lambda arr, idx: arr[idx[-1]]
-            }
+        "random": lambda arr, idx: arr[rng.choice(idx)],
+        "maximum": lambda arr, idx: arr[idx].max(axis=0),
+        "average": lambda arr, idx: arr[idx].mean(axis=0),
+        "first": lambda arr, idx: arr[idx[0]],
+        "last": lambda arr, idx: arr[idx[-1]],
+    }
 
     sampler = sampling_strategies[strategy]
     for i_out, i0 in enumerate(range(0, npts_in, frames_to_group)):
-        i1 = min(npts_in, i0+frames_to_group)
-        array_out[i_out] = sampler(array,
-                                   np.arange(i0, i1, dtype=int))
+        i1 = min(npts_in, i0 + frames_to_group)
+        array_out[i_out] = sampler(array, np.arange(i0, i1, dtype=int))
 
     return array_out
 
 
 def normalize_array(
-        array: np.ndarray,
-        lower_cutoff: Optional[float] = None,
-        upper_cutoff: Optional[float] = None,
-        dtype: type = np.uint8) -> np.ndarray:
+    array: np.ndarray,
+    lower_cutoff: Optional[float] = None,
+    upper_cutoff: Optional[float] = None,
+    dtype: type = np.uint8,
+) -> np.ndarray:
     """
     Normalize an array into an integer type with
     cutoff values
@@ -135,9 +136,9 @@ def normalize_array(
         upper_cutoff = normalized.max()
 
     normalized -= lower_cutoff
-    delta = upper_cutoff-lower_cutoff
-    normalized = normalized/delta
-    normalized *= (final_max-final_min)
+    delta = upper_cutoff - lower_cutoff
+    normalized = normalized / delta
+    normalized *= final_max - final_min
     normalized = np.round(normalized)
     normalized += final_min
     normalized = normalized.astype(dtype)
