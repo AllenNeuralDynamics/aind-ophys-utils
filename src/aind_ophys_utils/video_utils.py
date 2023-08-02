@@ -5,7 +5,7 @@ import h5py
 import imageio_ffmpeg as mpg
 import numpy as np
 
-from .array_utils import downsample_array
+from aind_ophys_utils.array_utils import downsample_array
 
 
 def downsample_h5_video(
