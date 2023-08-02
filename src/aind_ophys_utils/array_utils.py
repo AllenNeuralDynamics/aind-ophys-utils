@@ -1,3 +1,4 @@
+""" Utils to manipulate arrays """
 from typing import Optional, Union
 
 import h5py

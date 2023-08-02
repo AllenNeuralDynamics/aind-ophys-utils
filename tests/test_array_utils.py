@@ -1,3 +1,4 @@
+"""Tests array_utils"""
 import numpy as np
 import pytest
 
@@ -15,6 +16,7 @@ from aind_ophys_utils import array_utils as au
     ],
 )
 def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
+    """Test n_frames_from_hz"""
     actual = au.n_frames_from_hz(input_frame_rate, downsampled_frame_rate)
     assert actual == expected
 
@@ -125,6 +127,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
 def test_downsample(
     array, input_fps, output_fps, random_seed, strategy, expected
 ):
+    """Test downsample_array"""
     array_out = au.downsample_array(
         array=array,
         input_fps=input_fps,
@@ -164,6 +167,7 @@ def test_downsample(
 def test_downsample_exceptions(
     array, input_fps, output_fps, random_seed, strategy, expected
 ):
+    """Test Exception raised by downsample_array"""
     with pytest.raises(ValueError):
         au.downsample_array(
             array=array,
@@ -214,6 +218,7 @@ def test_decimate_video(input_fps):
     ],
 )
 def test_normalize_array(array, lower_cutoff, upper_cutoff, expected):
+    """Test normalize_array"""
     normalized = au.normalize_array(
         array, lower_cutoff=lower_cutoff, upper_cutoff=upper_cutoff
     )

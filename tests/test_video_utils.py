@@ -1,5 +1,4 @@
-from collections import defaultdict
-
+"""Tests video_utils"""
 import h5py
 import imageio_ffmpeg as mpg
 import numpy as np
@@ -34,6 +33,7 @@ import aind_ophys_utils.video_utils as vu
 def test_video_downsample(
     array, input_fps, output_fps, strategy, expected, tmp_path
 ):
+    """Test downsample_h5_video"""
     video_file = tmp_path / "sample_video_file.h5"
     with h5py.File(video_file, "w") as h5f:
         h5f.create_dataset("data", data=array)
@@ -71,6 +71,7 @@ def compare_videos(encoded_video_path: str, expected_video: np.ndarray):
 
 @pytest.fixture
 def raw_video_fixture(request):
+    """Create a test video"""
     video_shape = request.param.get("video_shape", (16, 32))
     nframes = request.param.get("nframes", 25)
     fps = request.param.get("fps", 30)
@@ -102,6 +103,7 @@ def raw_video_fixture(request):
     indirect=["raw_video_fixture"],
 )
 def test_encode_video(raw_video_fixture, tmp_path):
+    """Test encode_video"""
     output_path = tmp_path / "test_video.webm"
 
     fps = raw_video_fixture["fps"]
@@ -112,32 +114,3 @@ def test_encode_video(raw_video_fixture, tmp_path):
     ),
 
     compare_videos(output_path, expected_video)
-
-
-@pytest.fixture
-def encoded_videos_fixture(request, tmp_path):
-    num_videos = request.param.get("num_videos", 2)
-    video_shape = request.param.get("video_shape", (32, 32))
-    nframes = request.param.get("nframes", 30)
-    fps = request.param.get("fps", 30)
-
-    rng = np.random.default_rng(0)
-    test_videos = defaultdict(list)
-
-    for i in range(num_videos):
-        data = np.array(
-            [
-                rng.integers(0, 256, size=video_shape, dtype="uint8")
-                for _ in range(nframes)
-            ]
-        )
-
-        test_video_path = tmp_path / f"test_video_{i}.webm"
-        vu.encode_video(
-            video=data, output_path=test_video_path.as_posix(), fps=fps
-        )
-
-        test_videos["raw_data"].append(data)
-        test_videos["encoded_videos"].append(test_video_path)
-
-    return test_videos
