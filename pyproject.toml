@@ -17,6 +17,9 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
+    'h5py',
+    'imageio_ffmpeg',
+    'numpy'
 ]
 
 [project.optional-dependencies]
@@ -27,7 +30,8 @@ dev = [
     'interrogate',
     'isort',
     'Sphinx',
-    'furo'
+    'furo',
+    'pytest'
 ]
 
 [tool.setuptools.packages.find]
