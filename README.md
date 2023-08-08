@@ -11,7 +11,9 @@ This repository contains python utility methods for processing optical physiolog
 
 ## Installation
 
-`pip install aind-ophys-utils`
+```bash
+pip install aind-ophys-utils
+```
 
 To use the software from source, clone the repository and in the root directory run
 ```bash
