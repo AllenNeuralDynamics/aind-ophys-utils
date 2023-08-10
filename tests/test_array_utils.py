@@ -190,7 +190,7 @@ def test_decimate_video(input_fps):
 
     expected = []
     for i0 in range(0, 71, input_fps):
-        frame = np.mean(video[i0:i0+input_fps], axis=0)
+        frame = np.mean(video[i0 : i0 + input_fps], axis=0)
         expected.append(frame)
     expected = np.array(expected)
 
