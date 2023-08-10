@@ -131,7 +131,7 @@ def motion_csv_path_fixture(tmp_path_factory):
     yield file_path
     try:  # FIX: Why does the Path object stay open??
         os.remove(file_path)
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         pass
 
 
