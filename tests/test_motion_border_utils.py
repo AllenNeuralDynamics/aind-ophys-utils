@@ -99,7 +99,7 @@ def motion_csv_path_fixture(tmp_path_factory):
     yield file_path
     try: # FIX: Why does the Path object stay open??
         os.remove(file_path)
-    except:
+    except FileNotFoundError:
         pass
 
 
@@ -145,3 +145,4 @@ def test_get_max_correction_from_file(
 def test_motion_border_from_max_shift(max_shift, expected):
     actual = motion_border_from_max_shift(max_shift)
     np.testing.assert_allclose(np.array(actual), np.array(expected))
+    
