@@ -19,8 +19,7 @@ dynamic = ["version"]
 dependencies = [
     'h5py',
     'imageio_ffmpeg',
-    'numpy',
-    'pandas'
+    'numpy'
 ]
 
 [project.optional-dependencies]
