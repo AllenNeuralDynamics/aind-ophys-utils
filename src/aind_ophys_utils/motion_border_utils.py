@@ -76,15 +76,14 @@ def get_max_correction_values(
 
 
 def get_max_correction_from_file(
-    input_csv: Path, max_shift: float = 30.0
+    input_df: pd.DataFrame, max_shift: float = 30.0
 ) -> MaxFrameShift:
     """
 
     Parameters
     ----------
-    input_csv: Path
-        Path to motion correction values for each frame stored in .csv format.
-        This .csv file is expected to have a header row of either:
+    input_df: pd.Dataframe
+        Pandas dataframe in the following format
         ['framenumber','x','y','correlation','kalman_x', 'kalman_y'] or
         ['framenumber','x','y','correlation','input_x','input_y','kalman_x',
          'kalman_y','algorithm','type']
@@ -100,10 +99,9 @@ def get_max_correction_from_file(
         order [left, right, up, down].
 
     """
-    motion_correction_df = pd.read_csv(input_csv)
     max_shift = get_max_correction_values(
-        x_series=motion_correction_df["x"].astype("float"),
-        y_series=motion_correction_df["y"].astype("float"),
+        x_series=input_df["x"].astype("float"),
+        y_series=input_df["y"].astype("float"),
         max_shift=max_shift,
     )
     return max_shift
