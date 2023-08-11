@@ -198,5 +198,6 @@ def test_get_max_correction_from_file(
     ],
 )
 def test_motion_border_from_max_shift(max_shift, expected):
+    """ Test method get border from max shift"""
     actual = motion_border_from_max_shift(max_shift)
     np.testing.assert_allclose(np.array(actual), np.array(expected))
