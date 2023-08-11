@@ -130,10 +130,10 @@ def motion_csv_path_fixture(tmp_path_factory):
         for ii in range(10):
             out_file.write("%d,%d\n" % (ii - 5, ii - 7))
     yield file_path
-    try:  # FIX: Why does the Path object stay open??
-        os.remove(file_path)
-    except (FileNotFoundError, OSError):
-        pass
+    # try:  # FIX: Why does the Path object stay open??
+    #     os.remove(file_path)
+    # except (FileNotFoundError, OSError):
+    #     pass
 
 
 @pytest.mark.parametrize(
