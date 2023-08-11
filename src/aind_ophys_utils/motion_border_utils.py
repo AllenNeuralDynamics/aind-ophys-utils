@@ -1,3 +1,4 @@
+""" Utils to get motion borders """
 from collections import namedtuple
 
 import numpy as np
@@ -20,6 +21,7 @@ def get_max_correction_values(
     """
     Gets the max correction values in the cardinal directions from a series
     of correction values in the x and y directions
+
     Parameters
     ----------
     x_series: pd.Series:
@@ -111,6 +113,7 @@ def motion_border_from_max_shift(max_shift: MaxFrameShift) -> MotionBorder:
     """
     Find the MotionBorder that corresponds to a given
     MaxFrameShift
+
     Parameters
     ----------
     max_shift: float

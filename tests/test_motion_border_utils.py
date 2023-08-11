@@ -1,3 +1,4 @@
+"""Tests motion_border_utils"""
 import pytest
 import tempfile
 import pathlib
