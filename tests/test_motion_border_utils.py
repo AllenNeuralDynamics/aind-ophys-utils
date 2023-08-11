@@ -4,7 +4,7 @@ import tempfile
 import pathlib
 import numpy as np
 import pandas as pd
-import os
+# import os
 
 from aind_ophys_utils.motion_border_utils import (
     get_max_correction_values,
