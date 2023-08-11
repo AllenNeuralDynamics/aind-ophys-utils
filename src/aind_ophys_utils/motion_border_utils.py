@@ -111,6 +111,16 @@ def motion_border_from_max_shift(max_shift: MaxFrameShift) -> MotionBorder:
     """
     Find the MotionBorder that corresponds to a given
     MaxFrameShift
+    Parameters
+    ----------
+    max_shift: float
+        Maximum shift to allow when considering motion correction. Any
+        larger shifts are considered outliers.
+
+    Returns
+    -------
+    result
+        A named tuple of the maximum shift motion border
     """
 
     # The difference between MaxFrameShift and MotionBorder is that
