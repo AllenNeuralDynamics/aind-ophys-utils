@@ -7,7 +7,7 @@ import pandas as pd
 
 from aind_ophys_utils.motion_border_utils import (
     get_max_correction_values,
-    get_max_correction_from_file,
+    get_max_correction_from_df,
     MaxFrameShift,
     motion_border_from_max_shift,
     MotionBorder,
@@ -116,24 +116,17 @@ def test_get_max_correction_border(
 
 
 @pytest.fixture(scope="session")
-def motion_csv_path_fixture(tmp_path_factory):
-    """
-    Write out an example CSV for testing motion border detection;
-    will only contain 'x' and 'y' columns.
-    """
-    dir_path = tmp_path_factory.mktemp("motion_csv")
-    file_path = tempfile.mkstemp(dir=dir_path, suffix=".csv")[1]
-    file_path = pathlib.Path(file_path)
-    with open(file_path, "w") as out_file:
-        out_file.write("x,y\n")
-        for ii in range(10):
-            out_file.write("%d,%d\n" % (ii - 5, ii - 7))
-    yield file_path
-    # try:  # FIX: Why does the Path object stay open??
-    #     os.remove(file_path)
-    # except (FileNotFoundError, OSError):
-    #     pass
-
+def sample_dataframe():
+    data = {
+        'x': [],
+        'y': [],
+    }
+    for ii in range(10):
+        data['x'].append(ii - 5)
+        data['y'].append(ii - 7)
+    
+    df = pd.DataFrame(data)
+    return df
 
 @pytest.mark.parametrize(
     "max_shift, expected",
@@ -143,14 +136,15 @@ def motion_csv_path_fixture(tmp_path_factory):
         (22, MaxFrameShift(left=4, right=5, up=2, down=7)),
     ],
 )
-def test_get_max_correction_from_file(
-    motion_csv_path_fixture, max_shift, expected
+
+def test_get_max_correction_from_df(
+    sample_dataframe, max_shift, expected
 ):
     """
-    Test method to read a MaxFrameShift from a file
+    Test method to read a MaxFrameShift from a pandas dataframe
     """
-    actual = get_max_correction_from_file(
-        input_csv=motion_csv_path_fixture, max_shift=max_shift
+    actual = get_max_correction_from_df(
+        input_df=sample_dataframe, max_shift=max_shift
     )
 
     np.testing.assert_allclose(np.array(actual), np.array(expected))

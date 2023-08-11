@@ -75,7 +75,7 @@ def get_max_correction_values(
     return max_shift
 
 
-def get_max_correction_from_file(
+def get_max_correction_from_df(
     input_df: pd.DataFrame, max_shift: float = 30.0
 ) -> MaxFrameShift:
     """
