@@ -3,7 +3,6 @@ from collections import namedtuple
 
 import numpy as np
 import pandas as pd
-from pathlib import Path
 
 # see comment in motion_border_from_max_frame_shift for an explanation
 # of the difference between these two structures
