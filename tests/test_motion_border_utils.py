@@ -1,7 +1,5 @@
 """Tests motion_border_utils"""
 import pytest
-import tempfile
-import pathlib
 import numpy as np
 import pandas as pd
 
@@ -117,6 +115,7 @@ def test_get_max_correction_border(
 
 @pytest.fixture(scope="session")
 def sample_dataframe():
+    """ Sample dataframe for testing"""
     data = {
         'x': [],
         'y': [],
@@ -124,9 +123,9 @@ def sample_dataframe():
     for ii in range(10):
         data['x'].append(ii - 5)
         data['y'].append(ii - 7)
-    
     df = pd.DataFrame(data)
     return df
+
 
 @pytest.mark.parametrize(
     "max_shift, expected",
@@ -136,7 +135,6 @@ def sample_dataframe():
         (22, MaxFrameShift(left=4, right=5, up=2, down=7)),
     ],
 )
-
 def test_get_max_correction_from_df(
     sample_dataframe, max_shift, expected
 ):
