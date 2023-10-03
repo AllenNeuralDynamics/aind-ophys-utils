@@ -39,7 +39,7 @@ def downsample_array(
     output_fps: float = 4.0,
     strategy: str = "average",
     random_seed: int = 0,
-    n_jobs: Optional[int] = None
+    n_jobs: Optional[int] = None,
 ) -> np.ndarray:
     """Downsamples an array-like object along axis=0
 
@@ -90,9 +90,17 @@ def downsample_array(
             i1 = min(npts_in, i0 + frames_to_group)
             array_out[i_out] = sampler(array, np.arange(i0, i1, dtype=int))
     else:
-        array_out = np.array(ThreadPool(n_jobs).map(
-            lambda i0: sampler(array, np.arange(i0, min(npts_in, i0 + frames_to_group), dtype=int)),
-            range(0, npts_in, frames_to_group)))
+        array_out = np.array(
+            ThreadPool(n_jobs).map(
+                lambda i0: sampler(
+                    array,
+                    np.arange(
+                        i0, min(npts_in, i0 + frames_to_group), dtype=int
+                    ),
+                ),
+                range(0, npts_in, frames_to_group),
+            )
+        )
 
     return array_out
 
