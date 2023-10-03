@@ -150,18 +150,6 @@ def test_downsample(
             "maximum",
             np.array([6, 11]),
         ),
-        (
-            # maximum downsample ND array
-            # not defined
-            np.array(
-                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 1234], [11, 12]]
-            ),
-            7,
-            2,
-            0,
-            "maximum",
-            np.array([[6, 8], [11, 12]]),
-        ),
     ],
 )
 def test_downsample_exceptions(

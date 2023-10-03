@@ -1,4 +1,5 @@
 """ Utils to manipulate arrays """
+from multiprocessing.pool import ThreadPool
 from typing import Optional, Union
 
 import h5py
@@ -38,38 +39,38 @@ def downsample_array(
     output_fps: float = 4.0,
     strategy: str = "average",
     random_seed: int = 0,
+    n_jobs: Optional[int] = None
 ) -> np.ndarray:
     """Downsamples an array-like object along axis=0
 
     Parameters
     ----------
-        array: h5py.Dataset or numpy.ndarray
-            the input array
-        input_fps: float
-            frames-per-second of the input array
-        output_fps: float
-            frames-per-second of the output array
-        strategy: str
-            downsampling strategy. 'random', 'maximum', 'average',
-            'first', 'last'. Note 'maximum' is not defined for
-            multi-dimensional arrays
-        random_seed: int
-            passed to numpy.random.default_rng if strategy is 'random'
+    array: h5py.Dataset or numpy.ndarray
+        the input array
+    input_fps: float
+        frames-per-second of the input array
+    output_fps: float
+        frames-per-second of the output array
+    strategy: str
+        downsampling strategy. 'random', 'maximum', 'average',
+        'first', 'last'. Note 'maximum' is not defined for
+        multi-dimensional arrays
+    random_seed: int
+        passed to numpy.random.default_rng if strategy is 'random'
+    n_jobs: Optional[int]
+        The number of jobs to run in parallel.
 
-    Returns:
-        array_out: numpy.ndarray
-            array downsampled along axis=0
+    Returns
+    -------
+    array_out: numpy.ndarray
+        array downsampled along axis=0
     """
     if output_fps > input_fps:
         raise ValueError("Output FPS cannot be greater than input FPS")
-    if (strategy == "maximum") & (len(array.shape) > 1):
-        raise ValueError("downsampling with strategy 'maximum' is not defined")
 
     npts_in = array.shape[0]
     frames_to_group = n_frames_from_hz(input_fps, output_fps)
     npts_out = max(1, np.ceil(npts_in / frames_to_group).astype(int))
-
-    array_out = np.zeros((npts_out, *array.shape[1:]))
 
     if strategy == "random":
         rng = np.random.default_rng(random_seed)
@@ -83,9 +84,15 @@ def downsample_array(
     }
 
     sampler = sampling_strategies[strategy]
-    for i_out, i0 in enumerate(range(0, npts_in, frames_to_group)):
-        i1 = min(npts_in, i0 + frames_to_group)
-        array_out[i_out] = sampler(array, np.arange(i0, i1, dtype=int))
+    if n_jobs == 1:
+        array_out = np.zeros((npts_out, *array.shape[1:]))
+        for i_out, i0 in enumerate(range(0, npts_in, frames_to_group)):
+            i1 = min(npts_in, i0 + frames_to_group)
+            array_out[i_out] = sampler(array, np.arange(i0, i1, dtype=int))
+    else:
+        array_out = np.array(ThreadPool(n_jobs).map(
+            lambda i0: sampler(array, np.arange(i0, min(npts_in, i0 + frames_to_group), dtype=int)),
+            range(0, npts_in, frames_to_group)))
 
     return array_out
 
@@ -120,7 +127,6 @@ def normalize_array(
     -------
     normalized: numpy.ndarray
         normalized array of the specified integer type
-
     """
     final_max = np.iinfo(dtype).max
     final_min = np.iinfo(dtype).min
