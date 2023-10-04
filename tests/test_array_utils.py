@@ -105,6 +105,15 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             np.array([[13 / 4, 4], [19 / 3, 22 / 3]]),
         ),
         (
+            # average downsample ND array
+            np.arange(200000).reshape(100, 2000),
+            50,
+            1,
+            0,
+            "average",
+            np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
+        ),
+        (
             # average downsampel ND array with only 1 output frame
             np.array([[1, 2], [3, 4], [5, 6]]),
             10,

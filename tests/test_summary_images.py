@@ -22,23 +22,25 @@ def test_local_correlations(array, expected):
 
 
 @pytest.mark.parametrize(
-    "ds, bs",
+    "ds, bs, eight",
     [
-        (1, 2),
-        (1, 3),
-        (1, 4),
-        (1, 5),
-        (1, 7),
-        (1, 10),
-        (2, 2),
-        (2, 5),
-        (2, 10),
+        (1, 2, True),
+        (1, 3, True),
+        (1, 4, True),
+        (1, 5, True),
+        (1, 7, True),
+        (1, 10, True),
+        (2, 2, True),
+        (2, 5, True),
+        (2, 10, True),
+        (2, 10, False),
     ],
 )
-def test_max_corr_image(ds, bs):
+def test_max_corr_image(ds, bs, eight):
     """Test max_corr_image"""
     output = si.max_corr_image(
-        np.arange(180).reshape(20, 3, 3), downscale=ds, bin_size=bs
+        np.arange(180).reshape(20, 3, 3), downscale=ds, bin_size=bs,
+        eight_neighbours=eight
     )
     expected = np.ones((3, 3)) * (bs - 1) / bs
     assert_array_almost_equal(expected, output)

@@ -90,38 +90,42 @@ def test_nanmedian_filter(input, size, expected):
 
 
 @pytest.mark.parametrize(
-    "x, expected",
+    "x, expected, axis",
     [
-        (np.zeros(10), 0.0),  # Zeros
-        (np.ones(20), 0.0),  # All same, not zero
-        (np.array([-1, -1, -1]), 0.0),  # Negatives
-        (np.array([]), np.nan),  # Empty
-        (np.array([0, 0, np.nan, 0.0]), np.nan),  # Has NaN
-        (np.array([1]), 0.0),  # Unit
-        (np.array([-1, 2, 3]), 1.4826),  # Typical
-        (np.random.randn(5, 10000), [1] * 5),  # Typical
+        (np.zeros(10), 0.0, -1),  # Zeros
+        (np.ones(20), 0.0, -1),  # All same, not zero
+        (np.array([-1, -1, -1]), 0.0, -1),  # Negatives
+        (np.array([]), np.nan, -1),  # Empty
+        (np.array([0, 0, np.nan, 0.0]), np.nan, -1),  # Has NaN
+        (np.array([1]), 0.0, -1),  # Unit
+        (np.array([-1, 2, 3]), 1.4826, -1),  # Typical
+        (np.random.randn(5, 10000), [1] * 5, -1),  # Typical
+        (np.random.randn(10000, 5), [1] * 5, 0),   # Typical
     ],
 )
-def test_robust_std(x, expected):
-    assert_array_almost_equal(expected, robust_std(x), 1)
+def test_robust_std(x, expected, axis):
+    """Test robust_std"""
+    assert_array_almost_equal(expected, robust_std(x, axis), 1)
 
 
 @pytest.mark.filterwarnings("ignore:nperseg*:UserWarning")
 @pytest.mark.parametrize(
-    "x, expected, method",
+    "x, expected, n_jobs, method",
     list(
         map(
             lambda x: list(chain(*x)),
             product(
                 [
-                    [np.array([0, 1, 2, 3, np.nan]), np.nan],  # Has NaN
-                    [np.random.randn(20, 10000), [1] * 20],  # just noise
+                    [np.array([0, 1, 2, 3, np.nan]), np.nan, None],  # Has NaN
+                    [np.random.randn(20, 10000), [1] * 20, None],  # just noise
+                    [np.random.randn(20, 10000), [1] * 20, 1],  # just noise
                     [
                         np.random.randn(20, 10000)
                         + np.sin(  # Typical: noise+signal
                             np.linspace(0, 100, 200000).reshape(20, 10000)
                         ),
                         [1] * 20,
+                        None
                     ],
                 ],
                 [["welch"], ["mad"], ["fft"]],
@@ -129,7 +133,8 @@ def test_robust_std(x, expected):
         )
     ),
 )
-def test_noise_std(x, expected, method):
+def test_noise_std(x, expected, method, n_jobs):
     """Test noise_std"""
     decimal = 0 if method == "fft" else 1
-    assert_array_almost_equal(expected, noise_std(x, method), decimal)
+    assert_array_almost_equal(
+        expected, noise_std(x, method, n_jobs=n_jobs), decimal)

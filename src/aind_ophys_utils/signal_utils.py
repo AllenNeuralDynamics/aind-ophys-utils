@@ -1,3 +1,4 @@
+""" Utils for signal processing """
 from multiprocessing.pool import ThreadPool
 import numpy as np
 import pandas as pd
@@ -164,10 +165,7 @@ def robust_std(x: np.ndarray, axis: int = -1) -> Union[float, np.ndarray]:
     std: float or ndarray
         A robust estimation of standard deviation.
     """
-    if x.ndim > 1:
-        if axis != -1:
-            x = np.moveaxis(x, axis, -1)
-    elif np.any(np.isnan(x)) or x.size == 0:
+    if np.any(np.isnan(x)) or x.size == 0:
         return np.nan
     mad = np.median(
         np.abs(x - np.median(x, axis=axis, keepdims=True)), axis=axis

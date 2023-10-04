@@ -84,6 +84,8 @@ def downsample_array(
     }
 
     sampler = sampling_strategies[strategy]
+    if array.ndim == 1 or np.prod(array.shape[1:]) * frames_to_group < 50000:
+        n_jobs = 1  # it's faster to use only 1 job for small data
     if n_jobs == 1:
         array_out = np.zeros((npts_out, *array.shape[1:]))
         for i_out, i0 in enumerate(range(0, npts_in, frames_to_group)):
