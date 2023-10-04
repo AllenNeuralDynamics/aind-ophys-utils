@@ -1,11 +1,12 @@
 """ Utils for signal processing """
 from multiprocessing.pool import ThreadPool
+from typing import Optional, Tuple, Union
+
 import numpy as np
 import pandas as pd
 import scipy
-from scipy import signal
 import torch
-from typing import Optional, Tuple, Union
+from scipy import signal
 
 
 def percentile_filter(

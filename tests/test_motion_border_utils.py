@@ -1,14 +1,14 @@
 """Tests motion_border_utils"""
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
 from aind_ophys_utils.motion_border_utils import (
-    get_max_correction_values,
-    get_max_correction_from_df,
     MaxFrameShift,
-    motion_border_from_max_shift,
     MotionBorder,
+    get_max_correction_from_df,
+    get_max_correction_values,
+    motion_border_from_max_shift,
 )
 
 

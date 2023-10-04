@@ -1,8 +1,9 @@
 """ Summary images for calcium imaging movie data """
+from typing import Union
+
 import h5py
 import numpy as np
 import torch
-from typing import Union
 
 from aind_ophys_utils.array_utils import downsample_array
 from aind_ophys_utils.signal_utils import noise_std

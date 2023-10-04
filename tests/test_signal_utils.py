@@ -1,15 +1,16 @@
 """Tests signal_utils"""
-from itertools import product, chain
+from itertools import chain, product
+
 import numpy as np
-from numpy.testing import assert_array_almost_equal
 import pytest
+from numpy.testing import assert_array_almost_equal
 
 from aind_ophys_utils.signal_utils import (
-    percentile_filter,
     median_filter,
     nanmedian_filter,
-    robust_std,
     noise_std,
+    percentile_filter,
+    robust_std,
 )
 
 
