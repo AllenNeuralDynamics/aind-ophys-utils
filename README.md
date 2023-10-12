@@ -34,7 +34,7 @@ There are several libraries used to run linters, check documentation, and run te
 - Please test your changes using the **coverage** library, which will run the tests and log a coverage report:
 
 ```bash
-coverage run -m unittest discover && coverage report
+coverage run -m pytest && coverage report
 ```
 
 - Use **interrogate** to check that modules, methods, etc. have been documented thoroughly:
