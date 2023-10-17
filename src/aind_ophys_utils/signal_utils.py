@@ -260,8 +260,8 @@ def noise_std(
             x = np.concatenate(
                 (
                     x[..., : max_num_samples // 3],
-                    x[..., int(T // 2 - max_num_samples / 6): int(
-                            T // 2 + max_num_samples / 6)],
+                    x[..., int(T // 2 - max_num_samples / 6):
+                      int(T // 2 + max_num_samples / 6)],
                     x[..., -max_num_samples // 3:],
                 ),
                 axis=-1,
@@ -274,12 +274,8 @@ def noise_std(
                 res = ThreadPool(n_jobs).map(signal.welch, x)
                 ff = res[0][0]
                 psd = np.array([r[1] for r in res])
-            psd = (
-                torch.tensor(
-                    psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]
-                )
-                / 2
-            )
+            psd = torch.tensor(
+                psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
         else:
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)

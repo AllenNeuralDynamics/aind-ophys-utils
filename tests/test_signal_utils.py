@@ -121,7 +121,7 @@ def test_robust_std(x, expected, axis):
                     [np.random.randn(20, 10000), [1] * 20, None],  # just noise
                     [np.random.randn(20, 10000), [1] * 20, 1],  # just noise
                     [
-                        np.random.randn(20, 10000)
+                        np.random.randn(20, 10000) \
                         + np.sin(  # Typical: noise+signal
                             np.linspace(0, 100, 200000).reshape(20, 10000)
                         ),

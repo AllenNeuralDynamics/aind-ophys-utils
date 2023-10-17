@@ -20,8 +20,8 @@ from aind_ophys_utils.dff import dff
             [5, 7],
             ["welch", "mad"],
         )
-    )
-    + [(1, 10, 0.1, np.nan, np.nan, 5, "welch"), (1, 10, 0.1, 1, 1, 5, 0.2)],
+    ) + [(1, 10, 0.1, np.nan, np.nan, 5, "welch"),
+         (1, 10, 0.1, 1, 1, 5, 0.2)],
 )
 def test_dff(N, fs, rate, tau, b, snr, method):
     """Test dff"""

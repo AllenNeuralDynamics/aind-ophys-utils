@@ -1,5 +1,6 @@
 """ Utils to manipulate arrays """
-from multiprocessing.pool import ThreadPool
+from itertools import product
+from multiprocessing.pool import Pool, ThreadPool
 from typing import Optional, Union
 
 import h5py
@@ -31,6 +32,16 @@ def n_frames_from_hz(
     frames_to_group = np.round(input_frame_rate / downsampled_frame_rate)
     frames_to_group = frames_to_group.astype(int)
     return max(1, frames_to_group)
+
+
+def _mean_of_group(i, h5py_name, h5py_key, frames_to_group):
+    """Auxiliary function to compute group means in parallel"""
+    return h5py.File(h5py_name)[h5py_key][i: i + frames_to_group].mean(0)
+
+
+def _max_of_group(i, h5py_name, h5py_key, frames_to_group):
+    """Auxiliary function to compute group maximums in parallel"""
+    return h5py.File(h5py_name)[h5py_key][i: i + frames_to_group].max(0)
 
 
 def downsample_array(
@@ -92,17 +103,23 @@ def downsample_array(
             i1 = min(npts_in, i0 + frames_to_group)
             array_out[i_out] = sampler(array, np.arange(i0, i1, dtype=int))
     else:
+        compressed = isinstance(array, h5py.Dataset) and array.compression
+        if compressed and strategy in ("average", "maximum"):
+            # it's faster to use multiprocessing.Pool for compressed h5 data
+            return np.array(
+                Pool(n_jobs).starmap(
+                    _mean_of_group if strategy == "average" else _max_of_group,
+                    product(
+                        range(0, npts_in, frames_to_group),
+                        [array.file.filename],
+                        [array.name],
+                        [frames_to_group])))
         array_out = np.array(
             ThreadPool(n_jobs).map(
                 lambda i0: sampler(
                     array,
-                    np.arange(
-                        i0, min(npts_in, i0 + frames_to_group), dtype=int
-                    ),
-                ),
-                range(0, npts_in, frames_to_group),
-            )
-        )
+                    np.arange(i0, min(npts_in, i0 + frames_to_group))),
+                range(0, npts_in, frames_to_group)))
 
     return array_out
 
