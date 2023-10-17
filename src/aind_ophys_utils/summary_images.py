@@ -33,7 +33,7 @@ def local_correlations(
     Y = torch.tensor(mov, dtype=torch.float32, device=device)
     rho = torch.zeros(Y.shape[1:], device=device)
     w_mov = (Y - torch.mean(Y, axis=0)) / (
-        torch.std(Y, axis=0) + torch.finfo(torch.float32).eps
+        torch.std(Y, axis=0, correction=0) + torch.finfo(torch.float32).eps
     )
 
     rho_h = torch.mean(
@@ -50,32 +50,16 @@ def local_correlations(
 
     if eight_neighbours:
         rho_d1 = torch.mean(
-            torch.multiply(
-                w_mov[:, 1:, :-1],
-                w_mov[
-                    :,
-                    :-1,
-                    1:,
-                ],
-            ),
-            axis=0,
+            torch.multiply(w_mov[:, 1:, :-1], w_mov[:, :-1, 1:]), axis=0
         )
         rho_d2 = torch.mean(
-            torch.multiply(
-                w_mov[:, :-1, :-1],
-                w_mov[
-                    :,
-                    1:,
-                    1:,
-                ],
-            ),
-            axis=0,
+            torch.multiply(w_mov[:, :-1, :-1], w_mov[:, 1:, 1:,]), axis=0
         )
 
-        rho[:-1, :-1] += rho_d2
-        rho[1:, 1:] += rho_d1
         rho[1:, :-1] += rho_d1
-        rho[:-1, 1:] += rho_d2
+        rho[:-1, 1:] += rho_d1
+        rho[:-1, :-1] += rho_d2
+        rho[1:, 1:] += rho_d2
 
         neighbors = 8 * torch.ones(Y.shape[1:3], device=device)
         neighbors[0, :] -= 3
@@ -133,15 +117,11 @@ def max_corr_image(
         T = mov.shape[0]
     n_bins = max(1, int(np.round(T / bin_size)))
     bins = np.round(np.linspace(0, T, n_bins + 1)).astype(int)
-    return np.max(
-        [
-            local_correlations(
+    return np.max([
+        local_correlations(
                 mov[bins[i]:bins[i + 1]], eight_neighbours, device
-            )
-            for i in range(n_bins)
-        ],
-        0,
-    )
+        )
+        for i in range(n_bins)], 0)
 
 
 def pnr_image(

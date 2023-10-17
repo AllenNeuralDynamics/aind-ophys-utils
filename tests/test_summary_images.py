@@ -11,7 +11,7 @@ from aind_ophys_utils import summary_images as si
 @pytest.mark.parametrize(
     "array, expected",
     [
-        (np.arange(90).reshape(10, 3, 3), 0.9 * np.ones((3, 3))),
+        (np.arange(90).reshape(10, 3, 3), np.ones((3, 3))),
         (np.ones((10, 3, 3)), np.zeros((3, 3))),
         (np.nan * np.zeros((10, 3, 3)), np.nan * np.zeros((3, 3))),
     ],
@@ -43,7 +43,7 @@ def test_max_corr_image(ds, bs, eight):
         np.arange(180).reshape(20, 3, 3), downscale=ds, bin_size=bs,
         eight_neighbours=eight
     )
-    expected = np.ones((3, 3)) * (bs - 1) / bs
+    expected = np.ones((3, 3))
     assert_array_almost_equal(expected, output)
 
 
