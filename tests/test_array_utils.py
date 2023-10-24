@@ -1,4 +1,7 @@
 """Tests array_utils"""
+import tempfile
+
+import h5py
 import numpy as np
 import pytest
 
@@ -105,7 +108,16 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             np.array([[13 / 4, 4], [19 / 3, 22 / 3]]),
         ),
         (
-            # average downsampel ND array with only 1 output frame
+            # average downsample ND array
+            np.arange(200000).reshape(100, 2000),
+            50,
+            1,
+            0,
+            "average",
+            np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
+        ),
+        (
+            # average downsample ND array with only 1 output frame
             np.array([[1, 2], [3, 4], [5, 6]]),
             10,
             1,
@@ -138,6 +150,41 @@ def test_downsample(
     assert np.array_equal(expected, array_out)
 
 
+@pytest.mark.parametrize(("strategy, expected"),
+                         [
+    ("average",
+     np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
+     ),
+    ("maximum",
+     np.array([np.arange(98000, 100000), np.arange(198000, 200000)]),
+     ),
+],
+)
+def test_downsample_h5(strategy, expected):
+    """Test downsample_array"""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        with h5py.File(tmpdirname + "/test_gzip.h5", "w") as f:
+            f.create_dataset("data", data=np.arange(200000).reshape(100, 2000),
+                             chunks=(1, 2000), compression="gzip")
+            array = f["data"]
+            array_out = au.downsample_array(
+                array=array,
+                input_fps=50,
+                output_fps=1,
+                strategy=strategy,
+                random_seed=0,
+            )
+            assert np.array_equal(expected, array_out)
+            if strategy == "average":
+                f = au._mean_of_group
+            else:
+                f = au._max_of_group
+            array_out = np.array(list(map(
+                lambda i: f(i, array.file.filename, array.name, 50),
+                range(0, 100, 50))))
+            assert np.array_equal(expected, array_out)
+
+
 @pytest.mark.parametrize(
     ("array, input_fps, output_fps, random_seed, strategy, expected"),
     [
@@ -149,18 +196,6 @@ def test_downsample(
             0,
             "maximum",
             np.array([6, 11]),
-        ),
-        (
-            # maximum downsample ND array
-            # not defined
-            np.array(
-                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 1234], [11, 12]]
-            ),
-            7,
-            2,
-            0,
-            "maximum",
-            np.array([[6, 8], [11, 12]]),
         ),
     ],
 )

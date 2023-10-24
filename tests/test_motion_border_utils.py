@@ -1,14 +1,14 @@
 """Tests motion_border_utils"""
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
 from aind_ophys_utils.motion_border_utils import (
-    get_max_correction_values,
-    get_max_correction_from_df,
     MaxFrameShift,
-    motion_border_from_max_shift,
     MotionBorder,
+    get_max_correction_from_df,
+    get_max_correction_values,
+    motion_border_from_max_shift,
 )
 
 
@@ -115,14 +115,14 @@ def test_get_max_correction_border(
 
 @pytest.fixture(scope="session")
 def sample_dataframe():
-    """ Sample dataframe for testing"""
+    """Sample dataframe for testing"""
     data = {
-        'x': [],
-        'y': [],
+        "x": [],
+        "y": [],
     }
     for ii in range(10):
-        data['x'].append(ii - 5)
-        data['y'].append(ii - 7)
+        data["x"].append(ii - 5)
+        data["y"].append(ii - 7)
     df = pd.DataFrame(data)
     return df
 
@@ -135,9 +135,7 @@ def sample_dataframe():
         (22, MaxFrameShift(left=4, right=5, up=2, down=7)),
     ],
 )
-def test_get_max_correction_from_df(
-    sample_dataframe, max_shift, expected
-):
+def test_get_max_correction_from_df(sample_dataframe, max_shift, expected):
     """
     Test method to read a MaxFrameShift from a pandas dataframe
     """
@@ -190,6 +188,6 @@ def test_get_max_correction_from_df(
     ],
 )
 def test_motion_border_from_max_shift(max_shift, expected):
-    """ Test method get border from max shift"""
+    """Test method get border from max shift"""
     actual = motion_border_from_max_shift(max_shift)
     np.testing.assert_allclose(np.array(actual), np.array(expected))

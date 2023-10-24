@@ -20,7 +20,9 @@ dependencies = [
     'h5py',
     'imageio_ffmpeg',
     'numpy',
-    'pandas'
+    'pandas',
+    'scipy',
+    'torch'
 ]
 
 [project.optional-dependencies]
