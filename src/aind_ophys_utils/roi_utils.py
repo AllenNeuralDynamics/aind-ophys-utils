@@ -1,22 +1,24 @@
-import numpy as np
-import matplotlib.pyplot as plt
+from typing import Tuple, Union
+
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 from skimage import measure
-from typing import Optional, Tuple, Union
+from pathlib import Path
 
 
 def plot_mask_contours(
     masks: Union[np.ndarray, list],
     bg_img: np.ndarray = None,
-    color: str = 'r',
-    title: str = '',
+    color: str = "r",
+    title: str = "",
     ax: matplotlib.axes.Axes = None,
-    vmax_percentile: float = 99.5
+    vmax_percentile: float = 99.5,
 ) -> matplotlib.axes.Axes:
     """
     Plot the contours of roi masks on top of an image. Can be a single masks
     or a list of masks.
- 
+
     Parameters
     ----------
     masks : Union[np.ndarray, list]
@@ -46,7 +48,7 @@ def plot_mask_contours(
     if bg_img is not None:
         # remove 3rd dim
         vmax = np.percentile(bg_img, vmax_percentile)
-        ax.imshow(bg_img, cmap='gray', vmax=vmax)
+        ax.imshow(bg_img, cmap="gray", vmax=vmax)
 
     for roi in mask_list:
         contours = measure.find_contours(roi, 0.5)
@@ -54,7 +56,7 @@ def plot_mask_contours(
             ax.plot(contour[:, 1], contour[:, 0], linewidth=1, color=color)
 
     ax.set_title(title)
-    ax.axis('off')
+    ax.axis("off")
 
     return ax
 
@@ -81,3 +83,39 @@ def mask_list_from_array(mask: np.ndarray) -> Tuple[list, list]:
         roi_mask = mask == roi
         roi_masks.append(roi_mask)
     return roi_masks, roi_ids
+
+
+def s2p_stat_to_rois_list(
+    stat_path: Union[str, Path], output_shape: tuple = None
+) -> list:
+    """Take a stat file from suite2p and convert it to list of roi masks
+
+    Parameters
+    ----------
+    stat_path : Union[str, Path]
+        path to stat.npy file
+    output_shape : tuple, optional
+        shape of output roi masks, by default None
+    """
+
+    stat = np.load(stat_path, allow_pickle=True)
+
+    if output_shape is None:
+        output_shape = (512, 512)
+        print(
+            f"output_shape for roi canvas not specified,"
+            f"defaulting to {output_shape}"
+        )
+    roi_masks = []
+    for i in range(len(stat)):
+        mask = np.zeros(output_shape)
+
+        # use soma crop key to make mask
+        soma_crop = stat[i]["soma_crop"]
+        ypix = stat[i]["ypix"]
+        xpix = stat[i]["xpix"]
+
+        mask[ypix[soma_crop], xpix[soma_crop]] = 1
+        roi_masks.append(mask)
+
+    return roi_masks
