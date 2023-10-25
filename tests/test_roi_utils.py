@@ -22,7 +22,7 @@ def test_mask_list_from_array(n_masks):
     for i in range(n_masks):
         x = np.random.randint(0, 512 - 20)
         y = np.random.randint(0, 512 - 20)
-        masks_array[x : x + 20, y : y + 20] = i + 1
+        masks_array[x:x + 20, y:y + 20] = i + 1
 
     mask_list, _ = ru.mask_list_from_array(masks_array)
 
