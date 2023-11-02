@@ -2,6 +2,8 @@
 from itertools import chain, product
 
 import numpy as np
+import pandas as pd
+from pandas.testing import assert_frame_equal
 import pytest
 from numpy.testing import assert_array_almost_equal
 
@@ -11,6 +13,7 @@ from aind_ophys_utils.signal_utils import (
     noise_std,
     percentile_filter,
     robust_std,
+    compute_robust_snr_on_dataframe,
 )
 
 
@@ -101,7 +104,7 @@ def test_nanmedian_filter(input, size, expected):
         (np.array([1]), 0.0, -1),  # Unit
         (np.array([-1, 2, 3]), 1.4826, -1),  # Typical
         (np.random.randn(5, 10000), [1] * 5, -1),  # Typical
-        (np.random.randn(10000, 5), [1] * 5, 0),   # Typical
+        (np.random.randn(10000, 5), [1] * 5, 0),  # Typical
     ],
 )
 def test_robust_std(x, expected, axis):
@@ -121,12 +124,12 @@ def test_robust_std(x, expected, axis):
                     [np.random.randn(20, 10000), [1] * 20, None],  # just noise
                     [np.random.randn(20, 10000), [1] * 20, 1],  # just noise
                     [
-                        np.random.randn(20, 10000) \
+                        np.random.randn(20, 10000)
                         + np.sin(  # Typical: noise+signal
                             np.linspace(0, 100, 200000).reshape(20, 10000)
                         ),
                         [1] * 20,
-                        None
+                        None,
                     ],
                 ],
                 [["welch"], ["mad"], ["fft"]],
@@ -137,5 +140,46 @@ def test_robust_std(x, expected, axis):
 def test_noise_std(x, expected, method, n_jobs):
     """Test noise_std"""
     decimal = 0 if method == "fft" else 1
-    assert_array_almost_equal(
-        expected, noise_std(x, method, n_jobs=n_jobs), decimal)
+    assert_array_almost_equal(expected, noise_std(x, method, n_jobs=n_jobs), decimal)
+
+
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        (
+            {"data": [np.zeros(10)]},
+            {   
+                "skew": np.nan,
+                "robust_snr": np.nan,
+                "robust_signal": np.nan,
+                "robust_noise": np.nan,
+                "data": [np.zeros(10)],
+            },
+        ),
+        (
+            {"data": [np.ones(10)]},
+            {
+                "skew": np.nan,
+                "robust_snr": np.nan,
+                "robust_signal": np.nan,
+                "robust_noise": np.nan,
+                "data": [np.ones(10)],
+            },
+        ),
+        (
+            {"data": [np.asarray([1, 2, 2, 3, 3, 3, 4, 4, 4, 4])]},
+            {
+                "skew": -0.6,
+                "robust_snr": np.nan,
+                "robust_signal": np.nan,
+                "robust_noise": np.nan,
+                "data": [np.asarray([1, 2, 2, 3, 3, 3, 4, 4, 4, 4])],
+            },
+        ),
+    ],
+)
+def test_compute_robust_snr_on_dataframe(data, expected):
+    """Test compute_robust_snr_on_dataframe"""
+    data = pd.DataFrame(data)
+    expected = pd.DataFrame(expected)
+    assert_frame_equal(compute_robust_snr_on_dataframe(data), expected)
