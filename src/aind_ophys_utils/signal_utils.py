@@ -7,6 +7,7 @@ import pandas as pd
 import scipy
 import torch
 from scipy import signal
+from scipy.stats import skew
 
 
 def percentile_filter(
@@ -40,9 +41,7 @@ def percentile_filter(
     if dtype is None:
         dtype = input.dtype
     if size > len(input):
-        return (np.percentile(input, percentile) * np.ones_like(input)).astype(
-            dtype
-        )
+        return (np.percentile(input, percentile) * np.ones_like(input)).astype(dtype)
     if size > 20 and len(input) > 200:
         return (
             pd.Series(
@@ -50,23 +49,19 @@ def percentile_filter(
                     (
                         input[: size // 2][::-1],
                         input,
-                        input[: -size // 2 - 1: -1],
+                        input[: -size // 2 - 1 : -1],
                     )
                 )
             )
             .rolling(size, center=True)
             .quantile(percentile / 100)
-            .to_numpy(dtype)[size // 2: -size // 2]
+            .to_numpy(dtype)[size // 2 : -size // 2]
         )
     else:
-        return scipy.ndimage.percentile_filter(
-            input, percentile, size, output=dtype
-        )
+        return scipy.ndimage.percentile_filter(input, percentile, size, output=dtype)
 
 
-def median_filter(
-    input: np.ndarray, size: int, dtype: Optional[type] = None
-) -> np.ndarray:
+def median_filter(input: np.ndarray, size: int, dtype: Optional[type] = None) -> np.ndarray:
     """
     Fast 1D median filtering using reflection to
     extend the input array beyond its boundaries.
@@ -89,9 +84,7 @@ def median_filter(
     return percentile_filter(input, 50, size, dtype)
 
 
-def nanmedian_filter(
-    input: np.ndarray, size: int, dtype: Optional[type] = None
-) -> np.array:
+def nanmedian_filter(input: np.ndarray, size: int, dtype: Optional[type] = None) -> np.array:
     """1D median filtering with nan values
 
     Parameters
@@ -109,16 +102,10 @@ def nanmedian_filter(
     filtered_trace: ndarray
     """
     filtered_trace = (
-        pd.Series(
-            np.concatenate(
-                (input[: size // 2][::-1], input, input[: -size // 2 - 1: -1])
-            )
-        )
+        pd.Series(np.concatenate((input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])))
         .rolling(size, center=True, min_periods=1)
         .median()
-        .to_numpy(input.dtype if dtype is None else dtype)[
-            size // 2: -size // 2
-        ]
+        .to_numpy(input.dtype if dtype is None else dtype)[size // 2 : -size // 2]
     )
     if np.isnan(filtered_trace).any():
         filtered_trace = _fill_nan(filtered_trace)
@@ -141,9 +128,7 @@ def _fill_nan(input: np.ndarray) -> np.ndarray:
     nan_mask = np.isnan(input)
     nan_indices = np.where(nan_mask)[0]
     no_nan_indices = np.where(~nan_mask)[0]
-    interpolated_values = np.interp(
-        nan_indices, no_nan_indices, input[no_nan_indices]
-    )
+    interpolated_values = np.interp(nan_indices, no_nan_indices, input[no_nan_indices])
     input[nan_mask] = interpolated_values
     return input
 
@@ -168,9 +153,7 @@ def robust_std(x: np.ndarray, axis: int = -1) -> Union[float, np.ndarray]:
     """
     if np.any(np.isnan(x)) or x.size == 0:
         return np.nan
-    mad = np.median(
-        np.abs(x - np.median(x, axis=axis, keepdims=True)), axis=axis
-    )
+    mad = np.median(np.abs(x - np.median(x, axis=axis, keepdims=True)), axis=axis)
     return 1.4826 * mad
 
 
@@ -238,9 +221,7 @@ def noise_std(
                 ).astype(x.dtype)
             else:
                 res = ThreadPool(n_jobs).map(
-                    lambda y: noise_std(
-                        y, method="mad", filter_length=filter_length
-                    ),
+                    lambda y: noise_std(y, method="mad", filter_length=filter_length),
                     x.reshape(-1, T),
                 )
                 return np.reshape(res, dims).astype(x.dtype)
@@ -250,9 +231,7 @@ def noise_std(
             filtered_noise_0 = noise[noise < (1.5 * np.abs(noise.min()))]
             rstd = robust_std(filtered_noise_0)
             # second pass removing remaining pos and neg peak outliers
-            filtered_noise_1 = filtered_noise_0[
-                abs(filtered_noise_0) < (2.5 * rstd)
-            ]
+            filtered_noise_1 = filtered_noise_0[abs(filtered_noise_0) < (2.5 * rstd)]
             return robust_std(filtered_noise_1)
     else:
         T = x.shape[-1]
@@ -260,9 +239,8 @@ def noise_std(
             x = np.concatenate(
                 (
                     x[..., : max_num_samples // 3],
-                    x[..., int(T // 2 - max_num_samples / 6):
-                      int(T // 2 + max_num_samples / 6)],
-                    x[..., -max_num_samples // 3:],
+                    x[..., int(T // 2 - max_num_samples / 6) : int(T // 2 + max_num_samples / 6)],
+                    x[..., -max_num_samples // 3 :],
                 ),
                 axis=-1,
             )
@@ -274,14 +252,111 @@ def noise_std(
                 res = ThreadPool(n_jobs).map(signal.welch, x)
                 ff = res[0][0]
                 psd = np.array([r[1] for r in res])
-            psd = torch.tensor(
-                psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
+            psd = torch.tensor(psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
         else:
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
-            xdft = xdft[
-                ..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))
-            ]
+            xdft = xdft[..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))]
             psd = abs(xdft) ** 2 / T
         noise = torch.sqrt(torch.mean(psd, -1)).cpu()
         return noise.item() if noise.dim() == 0 else noise.numpy()
+
+
+def compute_robust_snr_on_dataframe(dataframe):
+    """takes a dataframe with a "dff" column that has the dff trace array
+        for a cell_specimen_id and for noise uses Robust estimate of std for signal
+        uses median deviation, and for robust snr the robust signal / robust noise
+
+    Parameters
+    -----------
+    dataframe: pd.dataframe
+        dataframe with dff column
+
+    Returns
+    -------
+    dataframe: pd.dataframe
+        input dataframe but with the following columns added: "robust_noise", "robust_signal", "robust_snr"
+
+    """
+    if "data" in dataframe.columns:
+        column = "data"
+    elif "filtered_events" in dataframe.columns:
+        column = "filtered_events"
+    robust_noise = dataframe[column].apply(lambda x: dff_robust_noise(x))
+    dataframe.insert(0, "robust_noise", robust_noise)
+    robust_signal = dataframe.apply(
+        lambda x: dff_robust_signal(x[column], x["robust_noise"]), axis=1
+    )
+    dataframe.insert(0, "robust_signal", robust_signal)
+    robust_snr = dataframe["robust_signal"] / dataframe["robust_noise"]
+    dataframe.insert(0, "robust_snr", robust_snr)
+    df_skew = dataframe[column].apply(lambda x: copmute_skew(x))
+    dataframe.insert(0, "skew", df_skew)
+    return dataframe
+
+
+def dff_robust_noise(dff_trace):
+    """Robust estimate of std of noise in df/f
+
+    Parameters
+    ----------
+    dff_trace : np.array
+        df/f trace
+
+    Returns
+    -------
+    float
+        robust estimate of std of noise in df/f
+    """
+    sigma_MAD_conversion_factor = 1.4826
+    # dff_trace = np.asarray(dff_trace)
+    # first pass removing big pos peaks
+    dff_trace = dff_trace[dff_trace < 1.5 * np.abs(dff_trace.min())]
+    MAD = np.median(np.abs(dff_trace - np.median(dff_trace)))  # MAD = median absolute deviation
+    robust_standard_deviation = sigma_MAD_conversion_factor * MAD
+
+    # second pass removing remaining pos and neg peaks
+    dff_trace = dff_trace[
+        np.abs(dff_trace - np.median(dff_trace)) < 2.5 * robust_standard_deviation
+    ]
+    MAD = np.median(np.abs(dff_trace - np.median(dff_trace)))
+    robust_standard_deviation = sigma_MAD_conversion_factor * MAD
+    return robust_standard_deviation
+
+
+def dff_robust_signal(dff_trace, robust_standard_deviation):
+    """median deviation
+
+    Parameters
+    ----------
+    dff_trace: list
+        dff trace
+    robust_standard_deviation: float
+        robust estimate of std of noise in df/f
+
+    Returns
+    -------
+    float
+        median deviation
+    """
+    dff_trace = np.asarray(dff_trace)
+    median_deviation = np.median(
+        dff_trace[(dff_trace - np.median(dff_trace)) > robust_standard_deviation]
+    )
+    return median_deviation
+
+
+def copmute_skew(dff_trace):
+    """Computes the skew of the signal using scipy.stats.skew to determine skew from the mean of the signal using the fisher-pearson coefficient of skewness
+
+    Parameters
+    ----------
+    dff_trace : list
+        dff trace
+
+    Returns
+    -------
+    float
+        skew of the signal
+    """
+    return skew(dff_trace, nan_policy="omit")
