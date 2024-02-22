@@ -109,21 +109,8 @@ def downsample_array(
         "first": lambda arr, idx: arr[idx[0]],
         "last": lambda arr, idx: arr[idx[-1]],
     }
-    # if dtype is None and array.dtype.itemsize < 4:
-    #     sampling_strategies["mean"] = \
-    #         lambda arr, idx: arr[idx].mean(axis=0).astype(np.float32)
-    #     sampling_strategies["median"] = \
-    #         lambda arr, idx: np.median(arr[idx], axis=0).astype(np.float32)
-    # if dtype is not None:
-    #     sampling_strategies["mean"] = \
-    #         lambda arr, idx: arr[idx].mean(axis=0).astype(dtype)
-    #     sampling_strategies["median"] = \
-    #         lambda arr, idx: np.median(arr[idx], axis=0).astype(dtype)
-
-    mean_dtype = None
-    if dtype is not None:
-        mean_dtype = dtype
-    elif array.dtype.itemsize < 4:
+    mean_dtype = dtype
+    if dtype is None and array.dtype.itemsize < 4:
         mean_dtype = np.float32
     if mean_dtype is not None:
         sampling_strategies["mean"] = \
