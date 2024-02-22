@@ -25,7 +25,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
 
 
 @pytest.mark.parametrize(
-    ("array, input_fps, output_fps, random_seed, strategy, expected"),
+    ("array, input_fps, output_fps, random_seed, strategy, dtype, expected"),
     [
         (
             # random downsample 1D array
@@ -34,6 +34,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "random",
+            None,
             np.array([2, 5]),
         ),
         (
@@ -45,6 +46,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "random",
+            None,
             np.array([[2, 1], [5, 8]]),
         ),
         (
@@ -54,6 +56,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "first",
+            None,
             np.array([1, 3]),
         ),
         (
@@ -65,6 +68,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "first",
+            None,
             np.array([[1, 3], [3, 2]]),
         ),
         (
@@ -74,6 +78,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "last",
+            None,
             np.array([2, 11]),
         ),
         (
@@ -85,6 +90,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "last",
+            None,
             np.array([[2, 1], [11, 12]]),
         ),
         (
@@ -94,7 +100,28 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "average",
+            None,
             np.array([13 / 4, 19 / 3]),
+        ),
+        (
+            # average downsample 1D array
+            np.array([1, 4, 6, 2, 3, 5, 11]),
+            7,
+            2,
+            0,
+            "average",
+            np.float32,
+            np.array([13 / 4, 19 / 3], dtype=np.float32),
+        ),
+        (
+            # average downsample 1D array
+            np.array([1, 4, 6, 2, 3, 5, 11], dtype=np.uint16),
+            7,
+            2,
+            0,
+            "average",
+            None,
+            np.array([13 / 4, 19 / 3], dtype=np.float32),
         ),
         (
             # average downsample ND array
@@ -105,6 +132,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "average",
+            None,
             np.array([[13 / 4, 4], [19 / 3, 22 / 3]]),
         ),
         (
@@ -114,6 +142,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             1,
             0,
             "average",
+            None,
             np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
         ),
         (
@@ -123,6 +152,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             1,
             0,
             "average",
+            None,
             np.array([[3.0, 4.0]]),
         ),
         (
@@ -132,12 +162,13 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             2,
             0,
             "maximum",
+            None,
             np.array([6, 11]),
         ),
     ],
 )
 def test_downsample(
-    array, input_fps, output_fps, random_seed, strategy, expected
+    array, input_fps, output_fps, random_seed, strategy, dtype, expected
 ):
     """Test downsample_array"""
     array_out = au.downsample_array(
@@ -146,6 +177,7 @@ def test_downsample(
         output_fps=output_fps,
         strategy=strategy,
         random_seed=random_seed,
+        dtype=dtype,
     )
     assert np.array_equal(expected, array_out)
 
