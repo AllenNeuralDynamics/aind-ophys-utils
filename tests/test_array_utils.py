@@ -165,6 +165,26 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             None,
             np.array([6, 11]),
         ),
+        (
+            # median downsample 1D array
+            np.array([1, 4, 6, 2, 3, 5, 11]),
+            7,
+            2,
+            0,
+            "median",
+            None,
+            np.array([3, 5]),
+        ),
+        (
+            # median downsample ND array
+            np.arange(200000).reshape(100, 2000),
+            50,
+            1,
+            0,
+            "median",
+            None,
+            np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
+        ),
     ],
 )
 def test_downsample(
@@ -187,8 +207,11 @@ def test_downsample(
     ("average",
      np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
      ),
-    ("maximum",
+    ("max",
      np.array([np.arange(98000, 100000), np.arange(198000, 200000)]),
+     ),
+    ("median",
+     np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
      ),
 ],
 )
@@ -207,10 +230,9 @@ def test_downsample_h5(strategy, expected):
                 random_seed=0,
             )
             assert np.array_equal(expected, array_out)
-            if strategy == "average":
-                f = au._mean_of_group
-            else:
-                f = au._max_of_group
+            f = {"average": au._mean_of_group,
+                 "max": au._max_of_group,
+                 "median": au._median_of_group}[strategy]
             array_out = np.array(list(map(
                 lambda i: f(i, array.file.filename, array.name, 50),
                 range(0, 100, 50))))
