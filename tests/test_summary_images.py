@@ -62,3 +62,25 @@ def test_pnr_image(ds, method):
     assert_array_almost_equal(
         np.ones((3, 3)), output / expected, decimal=decimal
     )
+
+
+@pytest.mark.parametrize(
+    "ds, bs",
+    list(product([1, 2, 5], [2, 10, 100])),
+)
+def test_max_image(ds, bs):
+    """Test max_image"""
+    output = si.max_image(
+        np.arange(180).reshape(20, 3, 3), downscale=ds, batch_size=bs
+    )
+    expected = {1: 171, 2: 166.5, 5: 153}[ds] + np.arange(9).reshape(3, 3)
+    assert_array_almost_equal(expected, output)
+
+
+@pytest.mark.parametrize("bs", [2, 10, 100])
+def test_mean_image(bs):
+    """Test mean_image"""
+    data = np.arange(180).reshape(20, 3, 3)
+    output = si.mean_image(data, batch_size=bs)
+    expected = data.mean(0)
+    assert_array_almost_equal(expected, output)

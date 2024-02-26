@@ -53,6 +53,7 @@ def encode_video(
     bitrate: str = "0",
     crf: int = 20,
     cpu_used: int = 4,
+    color: bool = False,
 ) -> str:
     """Encode a video with vp9 codec via imageio-ffmpeg
 
@@ -76,6 +77,8 @@ def encode_video(
         Sets how efficient the compression will be, by default 4. Values can
         be between 0 and 5. Higher values increase encoding speed at the
         expense of having some impact on quality and rate control accuracy.
+    color : bool, optional
+        Whether the input video is color or grayscale, by default False
 
     Returns
     -------
@@ -89,7 +92,7 @@ def encode_video(
     writer = mpg.write_frames(
         output_path,
         video_shape,
-        pix_fmt_in="gray8",
+        pix_fmt_in="rgb24" if color else "gray8",
         pix_fmt_out="yuv420p",
         codec="libvpx-vp9",
         fps=fps,

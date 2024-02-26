@@ -160,3 +160,59 @@ def pnr_image(
         mov = downsample_array(mov, downscale, 1)
     noise = noise_std(mov, method, axis=0, device=device)
     return (np.max(mov, 0) - np.min(mov, 0)) / noise
+
+
+def max_image(
+    mov: Union[h5py.Dataset, np.ndarray],
+    downscale: int = 1,
+    batch_size: int = 500,
+) -> np.ndarray:
+    """Computes the maximum image for the input dataset mov.
+    Downscales the movie (optionally), and efficiently calculates
+    the maximum image by combining parallely processed batches.
+
+    Parameters
+    ----------
+    mov: Union[h5py.Dataset, np.ndarray]
+        Input movie data.
+    downscale: int
+        Temporal downscale factor.
+    batch_size: int
+        Number of frames in each batch.
+
+    Returns
+    -------
+    max: ndarray
+        max image
+    """
+    if downscale > 1:
+        mov = downsample_array(mov, downscale, 1)
+    return downsample_array(mov, batch_size, 1, "maximum").max(0)
+
+
+def mean_image(
+    mov: Union[h5py.Dataset, np.ndarray],
+    batch_size: int = 500,
+) -> np.ndarray:
+    """Computes the mean image for the input dataset mov.
+    Efficiently combines parallely processed batches.
+
+    Parameters
+    ----------
+    mov: Union[h5py.Dataset, np.ndarray]
+        Input movie data.
+    batch_size: int
+        Number of frames in each batch.
+
+    Returns
+    -------
+    max: ndarray
+        max image
+    """
+    d = downsample_array(mov, batch_size, 1)
+    w = np.ones(d.shape[0])
+    smaller_last_batch = mov.shape[0] % batch_size
+    if smaller_last_batch:
+        w[-1] = smaller_last_batch / batch_size
+    w /= w.sum()
+    return np.tensordot(w, d, 1)
