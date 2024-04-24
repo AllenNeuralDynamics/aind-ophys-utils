@@ -1,4 +1,5 @@
 """Tests array_utils"""
+
 import tempfile
 
 import h5py
@@ -25,13 +26,12 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
 
 
 @pytest.mark.parametrize(
-    ("array, input_fps, output_fps, strategy, dtype, expected"),
+    ("array, factors, strategy, dtype, expected"),
     [
         (
             # first downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11]),
-            7,
-            2,
+            (4,),
             "first",
             None,
             np.array([1, 3]),
@@ -41,8 +41,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             np.array(
                 [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
             ),
-            7,
-            2,
+            (4, 1),
             "first",
             None,
             np.array([[1, 3], [3, 2]]),
@@ -50,8 +49,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         (
             # last downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11]),
-            7,
-            2,
+            (4,),
             "last",
             None,
             np.array([2]),
@@ -61,8 +59,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             np.array(
                 [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
             ),
-            7,
-            2,
+            (4, 1),
             "last",
             None,
             np.array([[2, 1]]),
@@ -70,8 +67,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         (
             # mid downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11]),
-            7,
-            2,
+            (4,),
             "mid",
             None,
             np.array([6, 11]),
@@ -81,8 +77,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             np.array(
                 [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
             ),
-            7,
-            2,
+            (4, 1),
             "middle",
             None,
             np.array([[6, 8], [11, 12]]),
@@ -90,8 +85,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         (
             # average downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11]),
-            7,
-            2,
+            (4,),
             "average",
             None,
             np.array([13 / 4, 19 / 3]),
@@ -99,8 +93,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         (
             # average downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11]),
-            7,
-            2,
+            (4,),
             "average",
             np.float32,
             np.array([13 / 4, 19 / 3], dtype=np.float32),
@@ -108,8 +101,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         (
             # average downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11], dtype=np.uint16),
-            7,
-            2,
+            (4,),
             "average",
             None,
             np.array([13 / 4, 19 / 3], dtype=np.float32),
@@ -119,44 +111,73 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
             np.array(
                 [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
             ),
-            7,
-            2,
+            (4, 1),
             "average",
             None,
             np.array([[13 / 4, 4], [19 / 3, 22 / 3]]),
         ),
         (
-            # average downsample ND array
-            np.arange(200000).reshape(100, 2000),
-            50,
-            1,
+            # average downsample ND array that include nan
+            np.array(
+                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [np.nan, 8], [11, 12]]
+            ),
+            (4, 2),
             "average",
             None,
-            np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
+            np.array([[29 / 8], [np.nan]]),
+        ),
+        (
+            # average downsample ND array
+            np.arange(200000).reshape(100, 2000),
+            (50, 1),
+            "average",
+            None,
+            np.arange(49000, 51000) + np.array([[0], [100000]]),
         ),
         (
             # average downsample ND array with only 1 output frame
             np.array([[1, 2], [3, 4], [5, 6]]),
-            10,
-            1,
+            (10, 1),
             "average",
             None,
             np.array([[3.0, 4.0]]),
         ),
         (
+            # average downsample ND array with only 1 output number
+            np.array([[1, 2], [3, 4], [5, 6]]),
+            (10, 2),
+            "average",
+            None,
+            np.array([[3.5]]),
+        ),
+        (
+            # average downsample ND array with only 1 output number
+            np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+            (10, 2),
+            "average",
+            None,
+            np.array([[3.5]]),
+        ),
+        (
             # maximum downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11]),
-            7,
-            2,
+            (4,),
             "maximum",
             None,
             np.array([6, 11]),
         ),
         (
+            # maximum downsample ND array along 2 axes
+            np.arange(200000).reshape(100, 2000),
+            (50, 700),
+            "maximum",
+            None,
+            np.array([[98699, 99399, 99999], [198699, 199399, 199999]]),
+        ),
+        (
             # median downsample 1D array
             np.array([1, 4, 6, 2, 3, 5, 11]),
-            7,
-            2,
+            (4,),
             "median",
             None,
             np.array([3, 5]),
@@ -164,61 +185,188 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         (
             # median downsample ND array
             np.arange(200000).reshape(100, 2000),
-            50,
-            1,
+            (50, 1),
             "median",
             None,
-            np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
+            np.arange(49000, 51000) + np.array([[0], [100000]]),
         ),
     ],
 )
-def test_downsample(
-    array, input_fps, output_fps, strategy, dtype, expected
-):
+def test_downsample(array, factors, strategy, dtype, expected):
     """Test downsample_array"""
     array_out = au.downsample_array(
         array=array,
-        input_fps=input_fps,
-        output_fps=output_fps,
+        factors=factors,
         strategy=strategy,
         dtype=dtype,
     )
-    assert np.array_equal(expected, array_out)
+    assert np.array_equal(expected, array_out, equal_nan=True)
 
 
-@pytest.mark.parametrize(("strategy, expected"),
-                         [
-    ("mean",
-     np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
-     ),
-    ("max",
-     np.array([np.arange(98000, 100000), np.arange(198000, 200000)]),
-     ),
-    ("median",
-     np.array([np.arange(49000, 51000), np.arange(149000, 151000)]),
-     ),
-],
+@pytest.mark.parametrize(
+    ("factors, strategy, chunks, expected"),
+    [
+        (
+            # mean downsample ND array
+            (50, 1),
+            "mean",
+            (1, 2000),
+            np.arange(49000, 51000) + np.array([[0], [100000]]),
+        ),
+        (
+            # maximum downsample ND array
+            (50, 1),
+            "max",
+            (1, 2000),
+            np.arange(98000, 100000) + np.array([[0], [100000]]),
+        ),
+        (
+            # maximum downsample ND array along 2 axes w/o perfect division
+            (50, 700),
+            "max",
+            (1, 2000),
+            np.array([[98699, 99399, 99999], [198699, 199399, 199999]]),
+        ),
+        (
+            # median downsample ND array
+            (50, 1),
+            "median",
+            (1, 2000),
+            np.arange(49000, 51000) + np.array([[0], [100000]]),
+        ),
+        (
+            # first downsample ND array
+            (50, 1),
+            "first",
+            (1, 2000),
+            np.arange(2000) + np.array([[0], [100000]]),
+        ),
+        (
+            # first downsample ND array along 2 axes
+            (50, 10),
+            "first",
+            (1, 2000),
+            np.arange(0, 2000, 10) + np.array([[0], [100000]]),
+        ),
+        (
+            # first downsample ND array along 2 axes with bad chunksize
+            (50, 10),
+            "first",
+            (2, 2000),
+            np.arange(0, 2000, 10) + np.array([[0], [100000]]),
+        ),
+    ],
 )
-def test_downsample_h5(strategy, expected):
-    """Test downsample_array"""
+def test_downsample_compressed_h5(factors, strategy, chunks, expected):
+    """Test downsample_array of compressed h5 file"""
     with tempfile.TemporaryDirectory() as tmpdirname:
         with h5py.File(tmpdirname + "/test_gzip.h5", "w") as f:
-            f.create_dataset("data", data=np.arange(200000).reshape(100, 2000),
-                             chunks=(1, 2000), compression="gzip")
+            f.create_dataset(
+                "data",
+                data=np.arange(200000).reshape(100, 2000),
+                chunks=chunks,
+                compression="gzip",
+            )
+            array = f["data"]
+            array_out = au.downsample_array(
+                array=array, factors=factors, strategy=strategy, skipna=False
+            )
+            assert np.array_equal(expected, array_out)
+            array_out = au.downsample_array(
+                array=array, factors=factors, strategy=strategy, skipna=True
+            )
+            assert np.array_equal(expected, array_out)
+            # below functions called within Pool need to be tested explicitly
+            if strategy == "first":
+                s = strategy
+                f = au._subsample_group
+            else:
+                s = {
+                    "mean": np.nanmean,
+                    "max": np.nanmax,
+                    "median": np.nanmedian,
+                }[strategy]
+                f = au._downsample_group
+            array_out = np.array(
+                list(
+                    map(
+                        lambda i: f(
+                            i, array.file.filename, array.name, factors, s
+                        ),
+                        range(0, 100, 50),
+                    )
+                )
+            )
+            assert np.array_equal(expected, array_out)
+
+
+@pytest.mark.parametrize(
+    ("factors, strategy, n_jobs, expected"),
+    [
+        (
+            # mean downsample ND array
+            (50, 1),
+            "mean",
+            None,
+            np.arange(49000, 51000) + np.array([[0], [100000]]),
+        ),
+        (
+            # mean downsample ND array using only 1 job
+            (50, 1),
+            "mean",
+            1,
+            np.arange(49000, 51000) + np.array([[0], [100000]]),
+        ),
+        (
+            # max downsample ND array along 2 axes
+            (50, 10),
+            "max",
+            None,
+            np.arange(98009, 100000, 10) + np.array([[0], [100000]]),
+        ),
+        (
+            # first downsample ND array along 2 axes
+            (50, 10),
+            "first",
+            None,
+            np.arange(0, 2000, 10) + np.array([[0], [100000]]),
+        ),
+    ],
+)
+def test_downsample_h5(factors, strategy, n_jobs, expected):
+    """Test downsample_array of h5 file"""
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        with h5py.File(tmpdirname + "/test.h5", "w") as f:
+            f.create_dataset(
+                "data",
+                data=np.arange(200000.0).reshape(100, 2000),
+                chunks=(1, 2000),
+            )
             array = f["data"]
             array_out = au.downsample_array(
                 array=array,
-                input_fps=50,
-                output_fps=1,
-                strategy=strategy
+                factors=factors,
+                strategy=strategy,
+                skipna=True,
+                n_jobs=n_jobs,
             )
             assert np.array_equal(expected, array_out)
-            f = {"mean": np.mean, "max": np.max, "median": np.median}[strategy]
-            array_out = np.array(list(map(
-                lambda i: au._downsample_group(
-                    i, array.file.filename, array.name, (50, 1), f),
-                range(0, 100, 50))))
-            assert np.array_equal(expected, array_out)
+
+
+@pytest.mark.parametrize(
+    ("array, f, expected"),
+    [
+        (np.arange(10)[:, None], au._nanfirst, 0),
+        (np.arange(10)[:, None], au._nanlast, 9),
+        (np.arange(10)[:, None], au._nanmid, 5),
+        (np.array([[np.nan], [1], [2]]), au._nanfirst, 1),
+        (np.array([[0], [1], [np.nan]]), au._nanlast, 1),
+    ],
+)
+def test_nan(array, f, expected):
+    """Test _nanfirst, _nanlast, _nanmid"""
+    out = f(array, 0)[0]
+    assert expected == out
 
 
 @pytest.mark.parametrize(
