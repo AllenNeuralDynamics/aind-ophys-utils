@@ -187,7 +187,7 @@ def max_image(
     """
     if downscale > 1:
         mov = downsample_array(mov, downscale, 1)
-    return downsample_array(mov, batch_size, 1, "maximum").max(0)
+    return downsample_array(mov, batch_size, 1, strategy="max").max(0)
 
 
 def mean_image(

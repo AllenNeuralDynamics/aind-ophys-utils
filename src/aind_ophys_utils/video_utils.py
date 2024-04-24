@@ -12,8 +12,7 @@ def downsample_h5_video(
     video_path: Path,
     input_fps: float = 31.0,
     output_fps: float = 4.0,
-    strategy: str = "average",
-    random_seed: int = 0,
+    strategy: str = "mean",
 ) -> np.ndarray:
     """Opens an h5 file and downsamples dataset 'data'
     along axis=0
@@ -22,18 +21,15 @@ def downsample_h5_video(
     ----------
         video_path: pathlib.Path
             path to an h5 video. Should have dataset 'data'. For video,
-            assumes dimensions [time, width, height] and downsampling
+            assumes dimensions [time, height, width] and downsampling
             applies to time.
         input_fps: float
             frames-per-second of the input array
         output_fps: float
             frames-per-second of the output array
         strategy: str
-            downsampling strategy. 'random', 'maximum', 'average',
-            'first', 'last'. Note 'maximum' is not defined for
-            multi-dimensional arrays
-        random_seed: int
-            passed to numpy.random.default_rng if strategy is 'random'
+            downsampling strategy. 'max', 'mean', 'median',
+            'first', 'last', 'mid'.
 
     Returns:
         video_out: numpy.ndarray
@@ -41,7 +37,7 @@ def downsample_h5_video(
     """
     with h5py.File(video_path, "r") as h5f:
         video_out = downsample_array(
-            h5f["data"], input_fps, output_fps, strategy, random_seed
+            h5f["data"], input_fps, output_fps, strategy=strategy
         )
     return video_out
 
