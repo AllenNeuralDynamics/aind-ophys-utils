@@ -41,17 +41,20 @@ def _downsample_group(
     i, h5py_name, h5py_key, factors, fun, dtype=None, cval=np.nan
 ):
     """Auxiliary function to compute group max/mean/medians in parallel"""
-    T = h5py.File(h5py_name)[h5py_key].shape[0]
+    array = h5py.File(h5py_name)[h5py_key]
+    T = array.shape[0]
     if fun != _nanmid:
         factors = (min(factors[0], T - i),) + factors[1:]
     if all(f == 1 for f in factors[1:]):
-        out = fun(h5py.File(h5py_name)[h5py_key][i: i + factors[0]], 0)
+        out = fun(array[i: i + factors[0]], 0)
     else:
+        nan_type = (
+            np.float32
+            if np.issubdtype(tmp := array.dtype, np.integer) and np.isnan(cval)
+            else tmp
+        )
         out = block_reduce(
-            h5py.File(h5py_name)[h5py_key][i: i + factors[0]].astype(
-                np.float32 if np.issubdtype(
-                    tmp := h5py.File(h5py_name)[h5py_key].dtype, np.integer)
-                and np.isnan(cval) else tmp),
+            array[i: i + factors[0]].astype(nan_type),
             factors,
             fun,
             cval,
@@ -167,9 +170,10 @@ def _subsample_array(
 ) -> np.ndarray:
     """subsample w/o skipping nans"""
     T = array.shape[0]
+    f0 = factors[0]
     if isinstance(array, h5py.Dataset) and array.compression:
         # it's faster to use multiprocessing for compressed h5 data
-        if array.chunks[0] == 1 and factors[0] > 1:
+        if array.chunks[0] == 1 and f0 > 1:
             # edgecase where ThreadPool is faster
             return np.array(
                 ThreadPool(n_jobs).map(
@@ -179,15 +183,15 @@ def _subsample_array(
                             for f in factors[1:]
                         )
                     ].astype(dtype),
-                    range(_i0(strategy, factors[0]), T, factors[0]),
+                    range(_i0(strategy, f0), T, f0),
                 )
             )
-        elif np.prod(array.shape[1:]) * factors[0] > 50000:
+        elif np.prod(array.shape[1:]) * f0 > 50000:
             return np.array(
                 Pool(n_jobs).starmap(
                     _subsample_group,
                     product(
-                        range(_i0(strategy, factors[0]), T, factors[0]),
+                        range(_i0(strategy, f0), T, f0),
                         [array.file.filename],
                         [array.name],
                         [factors],
@@ -210,34 +214,31 @@ def _subsample_array_nan(
     """subsample w/ skipping nans"""
     fun = {"first": _nanfirst, "last": _nanlast, "mid": _nanmid}[strategy]
     only1axis = len(factors) == 1 or all(f == 1 for f in factors[1:])
+    T = array.shape[0]
+    f0 = factors[0]
 
-    if only1axis or np.prod(array.shape[1:]) * factors[0] < 50000:
+    if only1axis or np.prod(array.shape[1:]) * f0 < 50000:
         n_jobs = 1  # it's faster to use only 1 job for small data
 
-    if only1axis:
-        f = lambda i: fun(array[i: i + factors[0]], 0).astype(dtype)
-    elif np.issubdtype(array.dtype, np.integer):
-        f = lambda i: block_reduce(
-            array[i: i + factors[0]].astype(np.float32),
-            factors,
-            fun,
-            np.nan,
-        )[0].astype(dtype)
-    else:
-        f = lambda i: block_reduce(
-            array[i: i + factors[0]], factors, fun, np.nan
-        )[0].astype(dtype)
+    f = [
+        lambda i: fun(array[i: i + f0], 0).astype(dtype),  # only1axis
+        lambda i: block_reduce(  # array is already float
+            array[i: i + f0], factors, fun, np.nan
+        )[0].astype(dtype),
+        lambda i: block_reduce(  # array is integer
+            array[i: i + f0].astype(np.float32), factors, fun, np.nan
+        )[0].astype(dtype),
+    ][(not only1axis) * (1 + np.issubdtype(array.dtype, np.integer))]
 
-    T = array.shape[0]
     if n_jobs == 1:  # no parallelization
-        return np.array([f(i) for i in range(0, T, factors[0])])
+        return np.array([f(i) for i in range(0, T, f0)])
     elif isinstance(array, h5py.Dataset) and array.compression:
         # it's faster to use multiprocessing.Pool for compressed h5 data
         return np.array(
             Pool(None).starmap(
                 _downsample_group,
                 product(
-                    range(0, len(array), factors[0]),
+                    range(0, len(array), f0),
                     [array.file.filename],
                     [array.name],
                     [factors],
@@ -247,7 +248,7 @@ def _subsample_array_nan(
             )
         )
     else:  # parallelize using ThreadPool
-        return np.array(ThreadPool(n_jobs).map(f, range(0, T, factors[0])))
+        return np.array(ThreadPool(n_jobs).map(f, range(0, T, f0)))
 
 
 def downsample_array(
@@ -301,8 +302,9 @@ def downsample_array(
         )
         if output_fps > input_fps:
             raise ValueError("Output FPS cannot be greater than input FPS")
-        factors = (n_frames_from_hz(input_fps, output_fps),) + \
-            (1,) * (len(array.shape)-1)
+        factors = (n_frames_from_hz(input_fps, output_fps),) + (1,) * (
+            len(array.shape) - 1
+        )
 
     if strategy in ("first", "last", "mid", "middle"):
         # these strategies that subsample and thus require reading
@@ -320,9 +322,10 @@ def downsample_array(
         else:
             dtype = array.dtype
 
-    fun = ({"max": np.max, "mean": np.mean, "median": np.median},
-           {"max": np.nanmax, "mean": np.nanmean, "median": np.nanmedian})[
-               skipna][strategy]
+    fun = (
+        {"max": np.max, "mean": np.mean, "median": np.median},
+        {"max": np.nanmax, "mean": np.nanmean, "median": np.nanmedian},
+    )[skipna][strategy]
 
     if array.ndim == 1 or np.prod(array.shape[1:]) * factors[0] < 50000:
         n_jobs = 1  # it's faster to use only 1 job for small data
@@ -346,30 +349,28 @@ def _downsample_array_nan(
 ) -> np.ndarray:
     """downsample w/ skipping nans"""
     T = array.shape[0]
+    f0 = factors[0]
     only1axis = len(factors) == 1 or all(f == 1 for f in factors[1:])
-    if only1axis:
-        f = lambda i: fun(array[i: i + factors[0]], 0).astype(dtype)
-    elif np.issubdtype(array.dtype, np.integer):
-        f = lambda i: block_reduce(
-            array[i: i + factors[0]].astype(np.float32),
-            factors,
-            fun,
-            np.nan,
-        )[0].astype(dtype)
-    else:
-        f = lambda i: block_reduce(
-            array[i: i + factors[0]], factors, fun, np.nan
-        )[0].astype(dtype)
+
+    f = [
+        lambda i: fun(array[i: i + f0], 0).astype(dtype),  # only1axis
+        lambda i: block_reduce(  # array is already float
+            array[i: i + f0], factors, fun, np.nan
+        )[0].astype(dtype),
+        lambda i: block_reduce(  # array is integer
+            array[i: i + f0].astype(np.float32), factors, fun, np.nan
+        )[0].astype(dtype),
+    ][(not only1axis) * (1 + np.issubdtype(array.dtype, np.integer))]
 
     if n_jobs == 1:  # no parallelization
-        return np.array([f(i) for i in range(0, T, factors[0])])
+        return np.array([f(i) for i in range(0, T, f0)])
     elif isinstance(array, h5py.Dataset) and array.compression:
         # it's faster to use multiprocessing.Pool for compressed h5 data
         return np.array(
             Pool(n_jobs).starmap(
                 _downsample_group,
                 product(
-                    range(0, T, factors[0]),
+                    range(0, T, f0),
                     [array.file.filename],
                     [array.name],
                     [factors],
@@ -379,7 +380,7 @@ def _downsample_array_nan(
             )
         )
     else:  # parallelize using ThreadPool
-        return np.array(ThreadPool(n_jobs).map(f, range(0, T, factors[0])))
+        return np.array(ThreadPool(n_jobs).map(f, range(0, T, f0)))
 
 
 def _downsample_array(
@@ -392,6 +393,7 @@ def _downsample_array(
 ) -> np.ndarray:
     """downsample w/o skipping nans"""
     T = array.shape[0]
+    f0 = factors[0]
     only1axis = len(factors) == 1 or all(f == 1 for f in factors[1:])
     nanfun = {
         "max": np.nanmax,
@@ -399,35 +401,34 @@ def _downsample_array(
         "median": np.nanmedian,
     }[strategy]
     nans = []
-    if only1axis:
-        f = lambda i: fun(array[i: i + factors[0]], 0).astype(dtype)
-    elif np.issubdtype(array.dtype, np.integer):
-        f = lambda i: block_reduce(
-            array[i: i + factors[0]].astype(np.float32),
+    f = [
+        lambda i: fun(array[i: i + f0], 0).astype(dtype),  # only1axis
+        lambda i: block_reduce(  # array is already float
+            array[i: i + f0], factors, nanfun, np.nan
+        )[0].astype(dtype),
+        lambda i: block_reduce(  # array is integer
+            array[i: i + f0].astype(np.float32),
             factors,
             nanfun,
             np.nan,
-        )[0].astype(dtype)
-    else:
-        f = lambda i: block_reduce(
-            array[i: i + factors[0]], factors, nanfun, np.nan
-        )[0].astype(dtype)
-    fnan = lambda i: block_reduce(
-        array[i: i + factors[0]], factors, np.sum, 0)[0]
+        )[0].astype(dtype),
+    ][(not only1axis) * (1 + np.issubdtype(array.dtype, np.integer))]
+
+    def fnan(i):
+        """auxiliary function to determine places of nans in output array"""
+        return block_reduce(array[i: i + f0], factors, np.sum, 0)[0]
 
     if n_jobs == 1:  # no parallelization
-        array_out = np.array([f(i) for i in range(0, T, factors[0])])
+        array_out = np.array([f(i) for i in range(0, T, f0)])
         if not only1axis:
-            nans = np.isnan(
-                np.array([fnan(i) for i in range(0, T, factors[0])])
-            )
+            nans = np.isnan(np.array([fnan(i) for i in range(0, T, f0)]))
     elif isinstance(array, h5py.Dataset) and array.compression:
         # it's faster to use multiprocessing.Pool for compressed h5 data
         array_out = np.array(
             Pool(n_jobs).starmap(
                 _downsample_group,
                 product(
-                    range(0, T, factors[0]),
+                    range(0, T, f0),
                     [array.file.filename],
                     [array.name],
                     [factors],
@@ -442,7 +443,7 @@ def _downsample_array(
                     Pool(n_jobs).starmap(
                         _downsample_group,
                         product(
-                            range(0, T, factors[0]),
+                            range(0, T, f0),
                             [array.file.filename],
                             [array.name],
                             [factors],
@@ -454,12 +455,10 @@ def _downsample_array(
                 )
             )
     else:  # parallelize using ThreadPool
-        array_out = np.array(
-            ThreadPool(n_jobs).map(f, range(0, T, factors[0]))
-        )
+        array_out = np.array(ThreadPool(n_jobs).map(f, range(0, T, f0)))
         if not only1axis:
             nans = np.isnan(
-                np.array(ThreadPool(n_jobs).map(fnan, range(0, T, factors[0])))
+                np.array(ThreadPool(n_jobs).map(fnan, range(0, T, f0)))
             )
     if np.any(nans):
         array_out[nans] = np.nan
