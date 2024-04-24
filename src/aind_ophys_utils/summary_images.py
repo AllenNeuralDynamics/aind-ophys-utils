@@ -113,7 +113,7 @@ def max_corr_image(
     """
     T = mov.shape[0]
     if downscale > 1:
-        mov = downsample_array(mov, downscale, 1)
+        mov = downsample_array(mov, factors=downscale)
         T = mov.shape[0]
     n_bins = max(1, int(np.round(T / bin_size)))
     bins = np.round(np.linspace(0, T, n_bins + 1)).astype(int)
@@ -157,7 +157,7 @@ def pnr_image(
         peak-to-noise ratio (PNR) image
     """
     if downscale > 1:
-        mov = downsample_array(mov, downscale, 1)
+        mov = downsample_array(mov, factors=downscale)
     noise = noise_std(mov, method, axis=0, device=device)
     return (np.max(mov, 0) - np.min(mov, 0)) / noise
 
@@ -186,8 +186,8 @@ def max_image(
         max image
     """
     if downscale > 1:
-        mov = downsample_array(mov, downscale, 1)
-    return downsample_array(mov, batch_size, 1, strategy="max").max(0)
+        mov = downsample_array(mov, factors=downscale)
+    return downsample_array(mov, factors=batch_size, strategy="max").max(0)
 
 
 def mean_image(
@@ -209,7 +209,7 @@ def mean_image(
     max: ndarray
         max image
     """
-    d = downsample_array(mov, batch_size, 1)
+    d = downsample_array(mov, factors=batch_size)
     w = np.ones(d.shape[0])
     smaller_last_batch = mov.shape[0] % batch_size
     if smaller_last_batch:

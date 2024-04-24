@@ -412,7 +412,7 @@ def test_decimate_video(input_fps):
     expected = np.array(expected)
 
     actual = au.downsample_array(
-        video, input_fps=input_fps, output_fps=1, strategy="average"
+        video, factors=input_fps, strategy="average"
     )
     np.testing.assert_array_equal(expected, actual)
 

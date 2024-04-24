@@ -255,7 +255,7 @@ def downsample_array(
     array: Union[h5py.Dataset, np.ndarray],
     input_fps: float = 31.0,
     output_fps: float = 4.0,
-    factors: tuple = None,
+    factors: Union[tuple, int] = None,
     strategy: str = "mean",
     skipna: bool = False,
     n_jobs: Optional[int] = None,
@@ -271,8 +271,9 @@ def downsample_array(
         Frames-per-second of the input array [deprecated]
     output_fps: float
         Frames-per-second of the output array [deprecated]
-    factors : array_like
-        Array containing down-sampling integer factor along each axis.
+    factors : tuple or int
+        Tuple containing down-sampling integer factor along each axis.
+        If int, will downsample only along the first axis.
     strategy: str
         Downsampling strategy. 'max'/'maximum', 'mean'/'average', 'median',
         'first', 'last', 'mid'/'middle'.
@@ -305,6 +306,8 @@ def downsample_array(
         factors = (n_frames_from_hz(input_fps, output_fps),) + (1,) * (
             len(array.shape) - 1
         )
+    if isinstance(factors, int):
+        factors = (factors,) + (1,) * (len(array.shape) - 1)
 
     if strategy in ("first", "last", "mid", "middle"):
         # these strategies that subsample and thus require reading
