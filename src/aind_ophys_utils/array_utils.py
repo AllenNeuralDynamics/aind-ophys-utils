@@ -129,7 +129,7 @@ def subsample_array(
     strategy: str
         Subsampling strategy. 'first', 'last', 'mid'/'middle'.
     skipna: bool
-        Exclude NA/null values when computing the result.
+        Exclude NaN values when computing the result.
     n_jobs: Optional[int]
         The number of jobs to run in parallel.
     dtype: Optional[type]
@@ -269,7 +269,7 @@ def downsample_array(
         Downsampling strategy. 'max'/'maximum', 'mean'/'average', 'median',
         'first', 'last', 'mid'/'middle'.
     skipna: bool
-        Exclude NA/null values when computing the result.
+        Exclude NaN values when computing the result.
     n_jobs: Optional[int]
         The number of jobs to run in parallel.
     dtype: Optional[type]
