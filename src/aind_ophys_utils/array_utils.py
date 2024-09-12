@@ -1,6 +1,7 @@
 """ Utils to manipulate arrays """
 
 import warnings
+from functools import partial
 from itertools import product
 from multiprocessing.pool import Pool, ThreadPool
 from typing import Optional, Union
@@ -104,19 +105,9 @@ def _select(x, axis, which):
     return res
 
 
-def _nanfirst(x, axis):
-    """Auxiliary function to compute nanfirst"""
-    return _select(x, axis, "first")
-
-
-def _nanlast(x, axis):
-    """Auxiliary function to compute nanlast"""
-    return _select(x, axis, "last")
-
-
-def _nanmid(x, axis):
-    """Auxiliary function to compute nanmid"""
-    return _select(x, axis, "mid")
+_nanfirst = partial(_select, which="first")
+_nanlast = partial(_select, which="last")
+_nanmid = partial(_select, which="mid")
 
 
 def subsample_array(
@@ -296,7 +287,7 @@ def downsample_array(
     if factors is None:
         # Emit a DeprecationWarning
         warnings.warn(
-            "The use of input_fps and output_fps is is deprecated and "
+            "The use of input_fps and output_fps is deprecated and "
             "will be removed in future versions. Use factors instead",
             DeprecationWarning,
             stacklevel=2,
