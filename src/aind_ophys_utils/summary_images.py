@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 import torch
 
-from aind_ophys_utils.array_utils import downsample_array
+from aind_ophys_utils.array_utils import downsample_array, _downsample_array
 from aind_ophys_utils.signal_utils import noise_std
 
 
@@ -206,8 +206,8 @@ def mean_image(
 
     Returns
     -------
-    max: ndarray
-        max image
+    mean: ndarray
+        mean image
     """
     d = downsample_array(mov, factors=batch_size)
     w = np.ones(d.shape[0])
@@ -216,3 +216,43 @@ def mean_image(
         w[-1] = smaller_last_batch / batch_size
     w /= w.sum()
     return np.tensordot(w, d, 1)
+
+
+def var_image(
+    mov: Union[h5py.Dataset, np.ndarray],
+    downscale: int = 1,
+    batch_size: int = 500,
+) -> np.ndarray:
+    """Computes the variance image for the input dataset mov.
+    Downscales the movie (optionally), and efficiently calculates
+    the variance image by combining parallely processed batches.
+
+    Parameters
+    ----------
+    mov: Union[h5py.Dataset, np.ndarray]
+        Input movie data.
+    downscale: int
+        Temporal downscale factor.
+    batch_size: int
+        Number of frames in each batch.
+
+    Returns
+    -------
+    var: ndarray
+        variance image
+    """
+    if downscale > 1:
+        mov = downsample_array(mov, factors=downscale)
+    d = _downsample_array(
+        mov,
+        fun=lambda x, axis: np.mean(x**2, axis),
+        factors=(batch_size, 1, 1)
+    )
+    w = np.ones(d.shape[0])
+    smaller_last_batch = mov.shape[0] % batch_size
+    if smaller_last_batch:
+        w[-1] = smaller_last_batch / batch_size
+    w /= w.sum()
+    mean_of_squares = np.tensordot(w, d, 1)
+    mean = mean_image(mov, batch_size=batch_size)
+    return mean_of_squares - mean**2

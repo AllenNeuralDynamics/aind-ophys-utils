@@ -66,7 +66,7 @@ def test_pnr_image(ds, method):
 
 @pytest.mark.parametrize(
     "ds, bs",
-    list(product([1, 2, 5], [2, 10, 100])),
+    list(product([1, 2, 5], [2, 7, 10, 100])),
 )
 def test_max_image(ds, bs):
     """Test max_image"""
@@ -77,10 +77,23 @@ def test_max_image(ds, bs):
     assert_array_almost_equal(expected, output)
 
 
-@pytest.mark.parametrize("bs", [2, 10, 100])
+@pytest.mark.parametrize("bs", [2, 7, 10, 100])
 def test_mean_image(bs):
     """Test mean_image"""
     data = np.arange(180).reshape(20, 3, 3)
     output = si.mean_image(data, batch_size=bs)
     expected = data.mean(0)
+    assert_array_almost_equal(expected, output)
+
+
+@pytest.mark.parametrize(
+    "ds, bs",
+    list(product([1, 2, 5], [2, 7, 10, 100])),
+)
+def test_var_image(ds, bs):
+    """Test var_image"""
+    output = si.var_image(
+        np.arange(180).reshape(20, 3, 3), downscale=ds, batch_size=bs
+    )
+    expected = {1: 2693.25, 2: 2673, 5: 2531.25}[ds] * np.ones((3, 3))
     assert_array_almost_equal(expected, output)
