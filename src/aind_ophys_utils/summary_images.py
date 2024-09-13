@@ -316,6 +316,6 @@ def _nan_sum(mov, f, batch_size):
     """
     return np.nansum(_downsample_array(
         mov,
-        fun=lambda x, axis: np.nansum(f(x), axis),
+        fun=lambda x, axis: np.nansum(f(x.astype(float)), axis),
         factors=(batch_size, 1, 1)
     ), 0)
