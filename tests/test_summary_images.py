@@ -40,7 +40,7 @@ def test_local_correlations(array, expected):
 def test_max_corr_image(ds, bs, eight):
     """Test max_corr_image"""
     output = si.max_corr_image(
-        np.arange(180).reshape(20, 3, 3), downscale=ds, bin_size=bs,
+        np.arange(270).reshape(30, 3, 3), downscale=ds, bin_size=bs,
         eight_neighbours=eight
     )
     expected = np.ones((3, 3))

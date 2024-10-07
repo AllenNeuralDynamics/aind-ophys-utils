@@ -1,4 +1,5 @@
 """ Summary images for calcium imaging movie data """
+from multiprocessing.pool import ThreadPool
 from typing import Union
 
 import h5py
@@ -88,6 +89,7 @@ def max_corr_image(
     bin_size: int = 50,
     eight_neighbours: bool = True,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    low_memory: bool = False,
 ) -> np.ndarray:
     """Computes the max-correlation image for the input movie.
     Downscales the movie, calculates the correlation image for each bin,
@@ -105,6 +107,12 @@ def max_corr_image(
         Use 8 neighbors if true, and 4 if false.
     device: str
         'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    low_memory: bool
+        Setting low_memory to True enforces chunked processing also
+        for compressed datasets to save memory.
+        (mov is usually processed in chunks of size bin_size*downscale.
+        However, it is faster to first downscale the entire movie,
+        if there are few chunks or mov is a compressed dataset.)
 
     Returns
     -------
@@ -113,15 +121,28 @@ def max_corr_image(
     """
     T = mov.shape[0]
     if downscale > 1:
-        mov = downsample_array(mov, factors=downscale)
-        T = mov.shape[0]
+        T = (T-1) // downscale + 1
     n_bins = max(1, int(np.round(T / bin_size)))
     bins = np.round(np.linspace(0, T, n_bins + 1)).astype(int)
-    return np.max([
-        local_correlations(
+    # downscale first (entire downscaled movie resides in RAM) then chunk
+    if (downscale == 1
+        or n_bins <= 5
+        or (isinstance(mov, h5py.Dataset)
+            and mov.compression
+            and not low_memory)):
+        if downscale > 1:
+            mov = downsample_array(mov, factors=downscale)
+        return np.max([
+            local_correlations(
                 mov[bins[i]:bins[i + 1]], eight_neighbours, device
-        )
-        for i in range(n_bins)], 0)
+            )
+            for i in range(n_bins)], 0)
+    # chunk first then downscale
+    return np.max(ThreadPool().map(lambda i: local_correlations(
+        downsample_array(mov[bins[i]*downscale:bins[i + 1]
+                         * downscale], factors=downscale, n_jobs=1),
+        eight_neighbours, device
+    ), range(n_bins)), 0)
 
 
 def pnr_image(
