@@ -242,6 +242,37 @@ def _subsample_array_nan(
         return np.array(ThreadPool(n_jobs).map(f, range(0, T, f0)))
 
 
+def _format_factors(factors, output_fps, input_fps, ndim):
+    """
+    Auxiliary function to handle different formats of `factors`
+
+    factors : Union[None, int, Tuple[int, ...]]
+        The desired downsampling factors. This can be:
+        - None: in which case the factors will be calculated from the
+          input and output frame rates.
+        - An integer: which will be expanded to a tuple with the specified
+          value followed by ones for additional dimensions.
+        - A tuple of integers: which specifies downsampling factors for
+          each dimension.
+    """
+    if factors is None:
+        # Emit a DeprecationWarning
+        warnings.warn(
+            "The use of input_fps and output_fps is deprecated and "
+            "will be removed in future versions. Use factors instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if output_fps > input_fps:
+            raise ValueError("Output FPS cannot be greater than input FPS")
+        factors = (n_frames_from_hz(input_fps, output_fps),) + (1,) * (
+            ndim - 1
+        )
+    if isinstance(factors, int):
+        factors = (factors,) + (1,) * (ndim - 1)
+    return factors
+
+
 def downsample_array(
     array: Union[h5py.Dataset, np.ndarray],
     input_fps: float = 31.0,
@@ -284,25 +315,11 @@ def downsample_array(
         Downsampled array
     """
 
-    if factors is None:
-        # Emit a DeprecationWarning
-        warnings.warn(
-            "The use of input_fps and output_fps is deprecated and "
-            "will be removed in future versions. Use factors instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        if output_fps > input_fps:
-            raise ValueError("Output FPS cannot be greater than input FPS")
-        factors = (n_frames_from_hz(input_fps, output_fps),) + (1,) * (
-            len(array.shape) - 1
-        )
-    if isinstance(factors, int):
-        factors = (factors,) + (1,) * (len(array.shape) - 1)
+    factors = _format_factors(factors, output_fps, input_fps, len(array.shape))
 
     if strategy in ("first", "last", "mid", "middle"):
-        # these strategies that subsample and thus require reading
-        # only part of the data are handled in a seperate function
+        # these strategies, which subsample and thus require reading
+        # only part of the data, are handled in a seperate function
         return subsample_array(array, factors, strategy, skipna, n_jobs, dtype)
 
     if strategy == "average":
@@ -395,7 +412,8 @@ def _downsample_array(
         "median": np.nanmedian,
     }[strategy]
     nans = []
-    f = [
+    # Determine the appropriate function based on only1axis and data type
+    downsample_func = [
         lambda i: fun(array[i: i + f0], 0).astype(dtype),  # only1axis
         lambda i: block_reduce(  # array is already float
             array[i: i + f0], factors, nanfun, np.nan
@@ -408,14 +426,15 @@ def _downsample_array(
         )[0].astype(dtype),
     ][(not only1axis) * (1 + np.issubdtype(array.dtype, np.integer))]
 
-    def fnan(i):
-        """auxiliary function to determine places of nans in output array"""
+    def detect_nans(i):
+        """auxiliary function to determine places of NaNs in output array"""
         return block_reduce(array[i: i + f0], factors, np.sum, 0)[0]
 
     if n_jobs == 1:  # no parallelization
-        array_out = np.array([f(i) for i in range(0, T, f0)])
+        array_out = np.array([downsample_func(i) for i in range(0, T, f0)])
         if not only1axis:
-            nans = np.isnan(np.array([fnan(i) for i in range(0, T, f0)]))
+            nans = np.isnan(np.array([detect_nans(i)
+                            for i in range(0, T, f0)]))
     elif isinstance(array, h5py.Dataset) and array.compression:
         # it's faster to use multiprocessing.Pool for compressed h5 data
         array_out = np.array(
@@ -449,11 +468,13 @@ def _downsample_array(
                 )
             )
     else:  # parallelize using ThreadPool
-        array_out = np.array(ThreadPool(n_jobs).map(f, range(0, T, f0)))
+        array_out = np.array(ThreadPool(n_jobs).map(
+            downsample_func, range(0, T, f0)))
         if not only1axis:
             nans = np.isnan(
-                np.array(ThreadPool(n_jobs).map(fnan, range(0, T, f0)))
+                np.array(ThreadPool(n_jobs).map(detect_nans, range(0, T, f0)))
             )
+    # Assign NaNs if detected
     if np.any(nans):
         array_out[nans] = np.nan
 
