@@ -1,11 +1,12 @@
 """ Summary images for calcium imaging movie data """
+from multiprocessing.pool import ThreadPool
 from typing import Union
 
 import h5py
 import numpy as np
 import torch
 
-from aind_ophys_utils.array_utils import downsample_array
+from aind_ophys_utils.array_utils import _downsample_array, downsample_array
 from aind_ophys_utils.signal_utils import noise_std
 
 
@@ -88,6 +89,7 @@ def max_corr_image(
     bin_size: int = 50,
     eight_neighbours: bool = True,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    low_memory: bool = False,
 ) -> np.ndarray:
     """Computes the max-correlation image for the input movie.
     Downscales the movie, calculates the correlation image for each bin,
@@ -105,6 +107,12 @@ def max_corr_image(
         Use 8 neighbors if true, and 4 if false.
     device: str
         'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    low_memory: bool
+        Setting low_memory to True enforces chunked processing also
+        for compressed datasets to save memory.
+        (mov is usually processed in chunks of size bin_size*downscale.
+        However, it is faster to first downscale the entire movie,
+        if there are few chunks or mov is a compressed dataset.)
 
     Returns
     -------
@@ -113,15 +121,28 @@ def max_corr_image(
     """
     T = mov.shape[0]
     if downscale > 1:
-        mov = downsample_array(mov, downscale, 1)
-        T = mov.shape[0]
+        T = (T-1) // downscale + 1
     n_bins = max(1, int(np.round(T / bin_size)))
     bins = np.round(np.linspace(0, T, n_bins + 1)).astype(int)
-    return np.max([
-        local_correlations(
+    # downscale first (entire downscaled movie resides in RAM) then chunk
+    if (downscale == 1
+        or n_bins <= 5
+        or (isinstance(mov, h5py.Dataset)
+            and mov.compression
+            and not low_memory)):
+        if downscale > 1:
+            mov = downsample_array(mov, factors=downscale)
+        return np.max([
+            local_correlations(
                 mov[bins[i]:bins[i + 1]], eight_neighbours, device
-        )
-        for i in range(n_bins)], 0)
+            )
+            for i in range(n_bins)], 0)
+    # chunk first then downscale
+    return np.max(ThreadPool().map(lambda i: local_correlations(
+        downsample_array(mov[bins[i]*downscale:bins[i + 1]
+                         * downscale], factors=downscale, n_jobs=1),
+        eight_neighbours, device
+    ), range(n_bins)), 0)
 
 
 def pnr_image(
@@ -157,6 +178,138 @@ def pnr_image(
         peak-to-noise ratio (PNR) image
     """
     if downscale > 1:
-        mov = downsample_array(mov, downscale, 1)
+        mov = downsample_array(mov, factors=downscale)
     noise = noise_std(mov, method, axis=0, device=device)
-    return (np.max(mov, 0) - np.min(mov, 0)) / noise
+    return (np.max(mov, 0) - np.median(mov, 0)) / noise
+
+
+def max_image(
+    mov: Union[h5py.Dataset, np.ndarray],
+    downscale: int = 1,
+    batch_size: int = 500,
+    skipna: bool = False,
+) -> np.ndarray:
+    """Computes the maximum image for the input dataset mov.
+    Downscales the movie (optionally), and efficiently calculates
+    the maximum image by combining parallely processed batches.
+
+    Parameters
+    ----------
+    mov: Union[h5py.Dataset, np.ndarray]
+        Input movie data.
+    downscale: int
+        Temporal downscale factor.
+    batch_size: int
+        Number of frames in each batch.
+    skipna: bool
+        Exclude NaN values when computing the result.
+
+    Returns
+    -------
+    max: ndarray
+        max image
+    """
+    if downscale > 1:
+        mov = downsample_array(mov, factors=downscale, skipna=skipna)
+    mov = downsample_array(
+        mov, factors=batch_size, strategy="max", skipna=skipna
+    )
+    return np.nanmax(mov, 0) if skipna else mov.max(0)
+
+
+def mean_image(
+    mov: Union[h5py.Dataset, np.ndarray],
+    batch_size: int = 500,
+    skipna: bool = False,
+) -> np.ndarray:
+    """Computes the mean image for the input dataset mov.
+    Efficiently combines parallely processed batches.
+
+    Parameters
+    ----------
+    mov: Union[h5py.Dataset, np.ndarray]
+        Input movie data.
+    batch_size: int
+        Number of frames in each batch.
+    skipna: bool
+        Exclude NaN values when computing the result.
+
+    Returns
+    -------
+    mean: ndarray
+        mean image
+    """
+    if skipna:
+        sum, not_nans = (
+            _nan_sum(mov, f, batch_size)
+            for f in (lambda x: x, lambda x: ~np.isnan(x))
+        )
+        return sum / not_nans
+    d = downsample_array(mov, factors=batch_size)
+    w = np.ones(d.shape[0])
+    smaller_last_batch = mov.shape[0] % batch_size
+    if smaller_last_batch:
+        w[-1] = smaller_last_batch / batch_size
+    w /= w.sum()
+    return np.tensordot(w, d, 1)
+
+
+def var_image(
+    mov: Union[h5py.Dataset, np.ndarray],
+    downscale: int = 1,
+    batch_size: int = 500,
+    skipna: bool = False,
+) -> np.ndarray:
+    """Computes the variance image for the input dataset mov.
+    Downscales the movie (optionally), and efficiently calculates
+    the variance image by combining parallely processed batches.
+
+    Parameters
+    ----------
+    mov: Union[h5py.Dataset, np.ndarray]
+        Input movie data.
+    downscale: int
+        Temporal downscale factor.
+    batch_size: int
+        Number of frames in each batch.
+    skipna: bool
+        Exclude NaN values when computing the result.
+
+    Returns
+    -------
+    var: ndarray
+        variance image
+    """
+    if downscale > 1:
+        mov = downsample_array(mov, factors=downscale)
+    if skipna:
+        sum_of_squares, sum, not_nans = (
+            _nan_sum(mov, f, batch_size)
+            for f in (np.square, lambda x: x, lambda x: ~np.isnan(x))
+        )
+        return sum_of_squares / not_nans - (sum / not_nans)**2
+    d = _downsample_array(
+        mov,
+        fun=lambda x, axis: np.mean(x**2, axis),
+        factors=(batch_size, 1, 1),
+    )
+    w = np.ones(d.shape[0])
+    smaller_last_batch = mov.shape[0] % batch_size
+    if smaller_last_batch:
+        w[-1] = smaller_last_batch / batch_size
+    w /= w.sum()
+    mean_of_squares = np.tensordot(w, d, 1)
+    mean = mean_image(mov, batch_size=batch_size)
+    return mean_of_squares - mean**2
+
+
+def _nan_sum(mov, f, batch_size):
+    """
+    Efficiently applies a specified function `f` to an array `mov`
+    and computes the sum along the first axis, ignoring NaN values.
+    """
+    return np.nansum(_downsample_array(
+        mov,
+        fun=lambda x, axis: np.nansum(f(x.astype(float)), axis),
+        factors=(batch_size, 1, 1)
+    ), 0)
