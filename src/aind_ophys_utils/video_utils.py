@@ -1,5 +1,6 @@
 """ Utils for video generation """
 from pathlib import Path
+from typing import Union
 
 import h5py
 import imageio_ffmpeg as mpg
@@ -12,8 +13,7 @@ def downsample_h5_video(
     video_path: Path,
     input_fps: float = 31.0,
     output_fps: float = 4.0,
-    strategy: str = "average",
-    random_seed: int = 0,
+    strategy: str = "mean",
 ) -> np.ndarray:
     """Opens an h5 file and downsamples dataset 'data'
     along axis=0
@@ -22,18 +22,15 @@ def downsample_h5_video(
     ----------
         video_path: pathlib.Path
             path to an h5 video. Should have dataset 'data'. For video,
-            assumes dimensions [time, width, height] and downsampling
+            assumes dimensions [time, height, width] and downsampling
             applies to time.
         input_fps: float
             frames-per-second of the input array
         output_fps: float
             frames-per-second of the output array
         strategy: str
-            downsampling strategy. 'random', 'maximum', 'average',
-            'first', 'last'. Note 'maximum' is not defined for
-            multi-dimensional arrays
-        random_seed: int
-            passed to numpy.random.default_rng if strategy is 'random'
+            downsampling strategy. 'max', 'mean', 'median',
+            'first', 'last', 'mid'.
 
     Returns:
         video_out: numpy.ndarray
@@ -41,24 +38,25 @@ def downsample_h5_video(
     """
     with h5py.File(video_path, "r") as h5f:
         video_out = downsample_array(
-            h5f["data"], input_fps, output_fps, strategy, random_seed
+            h5f["data"], input_fps, output_fps, strategy=strategy
         )
     return video_out
 
 
 def encode_video(
-    video: np.ndarray,
+    video: Union[h5py.Dataset, np.ndarray],
     output_path: str,
     fps: float,
     bitrate: str = "0",
     crf: int = 20,
     cpu_used: int = 4,
+    color: bool = False,
 ) -> str:
     """Encode a video with vp9 codec via imageio-ffmpeg
 
     Parameters
     ----------
-    video : np.ndarray
+    video : h5py.Dataset or numpy.ndarray
         Video to be encoded
     output_path : str
         Desired output path for encoded video
@@ -76,6 +74,8 @@ def encode_video(
         Sets how efficient the compression will be, by default 4. Values can
         be between 0 and 5. Higher values increase encoding speed at the
         expense of having some impact on quality and rate control accuracy.
+    color : bool, optional
+        Whether the input video is color or grayscale, by default False
 
     Returns
     -------
@@ -89,7 +89,7 @@ def encode_video(
     writer = mpg.write_frames(
         output_path,
         video_shape,
-        pix_fmt_in="gray8",
+        pix_fmt_in="rgb24" if color else "gray8",
         pix_fmt_out="yuv420p",
         codec="libvpx-vp9",
         fps=fps,

@@ -18,10 +18,9 @@ dynamic = ["version"]
 
 dependencies = [
     'h5py',
-    'imageio_ffmpeg',
-    'numpy',
+    'imageio-ffmpeg',
     'pandas',
-    'scipy',
+    'scikit-image',
     'torch'
 ]
 
