@@ -1,5 +1,6 @@
 """ Utils for signal processing """
-from multiprocessing.pool import ThreadPool
+
+from multiprocessing.pool import Pool, ThreadPool
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -174,6 +175,148 @@ def robust_std(x: np.ndarray, axis: int = -1) -> Union[float, np.ndarray]:
     return 1.4826 * mad
 
 
+def _nanwelch_1d_array(
+    data_1d: np.ndarray,
+    fs: float,
+    nperseg: int,
+    noverlap: int,
+    nfft: int,
+    detrend: str,
+    return_onesided: bool,
+    scaling: str,
+    axis: int,
+    max_num_samples: int,
+) -> np.ndarray:
+    """Helper function computing nanwelch on 1D arrays."""
+    data_1d = data_1d[~np.isnan(data_1d)]
+    T = len(data_1d)
+    if T > max_num_samples:
+        data_1d = np.concatenate(
+            (
+                data_1d[: max_num_samples // 3],
+                data_1d[
+                    int(T // 2 - max_num_samples / 6): int(
+                        T // 2 + max_num_samples / 6
+                    )
+                ],
+                data_1d[-max_num_samples // 3:],
+            ),
+        )
+    if T < nperseg:  # return NaN if not enough non-NaN values
+        data_1d = np.nan * np.ones(nperseg)
+    f, Pxx = signal.welch(
+        data_1d,
+        fs=fs,
+        nperseg=nperseg,
+        noverlap=noverlap,
+        nfft=nfft,
+        detrend=detrend,
+        return_onesided=return_onesided,
+        scaling=scaling,
+        axis=axis,
+    )
+    return f, Pxx
+
+
+def _nanwelch_wrapper(args):
+    """Helper function to call nanwelch with unpacked arguments."""
+    return nanwelch(*args)
+
+
+def nanwelch(
+    data: np.ndarray,
+    fs: float = 1.0,
+    nperseg: Optional[int] = None,
+    noverlap: Optional[int] = None,
+    nfft: Optional[int] = None,
+    detrend: str = "constant",
+    return_onesided: bool = True,
+    scaling: str = "density",
+    axis: int = -1,
+    max_num_samples: int = 3072,
+    n_jobs: Optional[int] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Apply Welch's method to data of arbitrary dimensions, excluding NaNs.
+
+    Parameters
+    ----------
+    data : ndarray
+        Input data, can be of any dimension.
+    fs : float
+        Sampling frequency of the data.
+    nperseg : int
+        Length of each segment.
+    noverlap : int
+        Number of points to overlap between segments.
+    nfft : int
+        Length of the FFT used.
+    detrend : str or function
+        Specifies how to detrend each segment.
+    return_onesided : bool
+        If True, return a one-sided spectrum for real data.
+    scaling : str
+        Selects between computing the power spectral density
+        ('density') and the power spectrum ('spectrum').
+    axis : int
+        Axis along which the periodogram is computed.
+    max_num_samples: int
+        Number of samples used for computing the noise
+    n_jobs: Optional[int]
+        The number of jobs to run in parallel.
+
+    Returns
+    -------
+    f : ndarray
+        Array of sample frequencies.
+    Pxx : ndarray
+        Power spectral density or power spectrum of data.
+    """
+    if nperseg is None:  # same default as scipy.signal.welch
+        nperseg = 256
+    data = np.moveaxis(data, axis, -1)
+    # Base case: if data is 1D, apply Welch's method directly
+    if data.ndim == 1:
+        return _nanwelch_1d_array(
+            data,
+            fs,
+            nperseg,
+            noverlap,
+            nfft,
+            detrend,
+            return_onesided,
+            scaling,
+            -1,
+            max_num_samples,
+        )
+    # Recursive case: if data is 2D or higher,
+    # apply the function to each sub-array in parallel
+    args = (
+        (
+            sub_array,
+            fs,
+            nperseg,
+            noverlap,
+            nfft,
+            detrend,
+            return_onesided,
+            scaling,
+            -1,
+            max_num_samples,
+            1,
+        )
+        for sub_array in data
+    )
+    # it's usually faster to use only 1 job for "small" data
+    if n_jobs == 1 or (n_jobs is None and np.prod(data.shape[:-1]) <= 5000):
+        results = list(map(_nanwelch_wrapper, args))
+    else:
+        with Pool(n_jobs) as pool:
+            results = list(pool.imap(_nanwelch_wrapper, args))
+    f, Pxx = zip(*results)
+    return f[0], np.array(Pxx)
+
+
 def noise_std(
     x: np.ndarray,
     method: str = "welch",
@@ -183,6 +326,7 @@ def noise_std(
     axis: int = -1,
     n_jobs: Optional[int] = None,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    skipna: bool = False,
 ) -> Union[float, np.ndarray]:
     """Estimate the standard deviation of the noise in input(s) `x`.
 
@@ -216,16 +360,21 @@ def noise_std(
         The number of jobs to run in parallel.
     device: str, default is 'cuda' if GPU is available.
         Device to use when using FFT method; 'cuda' or 'cpu'.
+    skipna: bool
+        Exclude NaN values when computing the result.
 
     Returns
     -------
     noise: float or ndarray
         A robust estimation of the standard deviation of the noise.
     """
-    if x.ndim > 1:
-        if axis != -1:
-            x = np.moveaxis(x, axis, -1)
+    if x.ndim > 1 and axis != -1:
+        x = np.moveaxis(x, axis, -1)
     if method == "mad":
+        if skipna:
+            raise ValueError(  # pragma: no cover
+                "Excluding NaNs (skipna=True) isn't supported for method 'mad'"
+            )
         if x.ndim > 1:
             dims, T = x.shape[:-1], x.shape[-1]
             if n_jobs == 1:
@@ -256,27 +405,44 @@ def noise_std(
             return robust_std(filtered_noise_1)
     else:
         T = x.shape[-1]
-        if T > max_num_samples:
+        if T > max_num_samples and not skipna:
             x = np.concatenate(
                 (
                     x[..., : max_num_samples // 3],
-                    x[..., int(T // 2 - max_num_samples / 6):
-                      int(T // 2 + max_num_samples / 6)],
+                    x[
+                        ...,
+                        int(T // 2 - max_num_samples / 6): int(
+                            T // 2 + max_num_samples / 6
+                        ),
+                    ],
                     x[..., -max_num_samples // 3:],
                 ),
                 axis=-1,
             )
             T = x.shape[-1]
         if method == "welch":
-            if n_jobs == 1 or x.ndim == 1:
-                ff, psd = signal.welch(x)
+            if n_jobs == 1 or x.ndim == 1 or skipna:
+                ff, psd = (
+                    nanwelch(x, max_num_samples=max_num_samples, n_jobs=n_jobs)
+                    if skipna
+                    else signal.welch(x)
+                )
             else:
                 res = ThreadPool(n_jobs).map(signal.welch, x)
                 ff = res[0][0]
                 psd = np.array([r[1] for r in res])
-            psd = torch.tensor(
-                psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
+            psd = (
+                torch.tensor(
+                    psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]
+                )
+                / 2
+            )
         else:
+            if skipna:
+                raise ValueError(  # pragma: no cover
+                    "Excluding NaNs (skipna=True) is not yet supported "
+                    "for method 'fft'"
+                )
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
             xdft = xdft[

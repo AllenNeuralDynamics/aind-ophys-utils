@@ -9,39 +9,34 @@ from aind_ophys_utils import summary_images as si
 
 
 @pytest.mark.parametrize(
-    "array, expected",
+    "array, expected, skipna",
     [
-        (np.arange(90).reshape(10, 3, 3), np.ones((3, 3))),
-        (np.ones((10, 3, 3)), np.zeros((3, 3))),
-        (np.nan * np.zeros((10, 3, 3)), np.nan * np.zeros((3, 3))),
+        (np.arange(90).reshape(10, 3, 3), np.ones((3, 3)), False),
+        (np.ones((10, 3, 3)), np.zeros((3, 3)), False),
+        (np.nan * np.zeros((10, 3, 3)), np.nan * np.zeros((3, 3)), False),
+        (np.concatenate([np.arange(90).reshape(10, 3, 3),
+                         np.nan * np.zeros((10, 3, 3))]),
+         np.nan * np.ones((3, 3)), False),
+        (np.concatenate([np.arange(90).reshape(10, 3, 3),
+                         np.nan * np.zeros((10, 3, 3))]),
+         np.ones((3, 3)), True),
     ],
 )
-def test_local_correlations(array, expected):
+def test_local_correlations(array, expected, skipna):
     """Test local_correlations"""
-    output = si.local_correlations(array)
+    output = si.local_correlations(array, skipna=skipna)
     assert_array_almost_equal(expected, output)
 
 
 @pytest.mark.parametrize(
-    "ds, bs, eight",
-    [
-        (1, 2, True),
-        (1, 3, True),
-        (1, 4, True),
-        (1, 5, True),
-        (1, 7, True),
-        (1, 10, True),
-        (2, 2, True),
-        (2, 5, True),
-        (2, 10, True),
-        (2, 10, False),
-    ],
+    "ds, bs, eight, skipna",
+    list(product([1, 2], [2, 5, 10], [False, True], [False, True])),
 )
-def test_max_corr_image(ds, bs, eight):
+def test_max_corr_image(ds, bs, eight, skipna):
     """Test max_corr_image"""
     output = si.max_corr_image(
         np.arange(270).reshape(30, 3, 3), downscale=ds, bin_size=bs,
-        eight_neighbours=eight
+        eight_neighbours=eight, skipna=skipna
     )
     expected = np.ones((3, 3))
     assert_array_almost_equal(expected, output)
@@ -49,13 +44,17 @@ def test_max_corr_image(ds, bs, eight):
 
 @pytest.mark.filterwarnings("ignore:nperseg*:UserWarning")
 @pytest.mark.parametrize(
-    "ds, method",
-    list(product([1, 10, 100], ["welch", "mad", "fft"])),
+    "ds, method, skipna",
+    list(product([1, 10, 100], ["welch", "mad", "fft"], [False])) +
+    list(product([1, 10], ["welch"], [True])),
 )
-def test_pnr_image(ds, method):
+def test_pnr_image(ds, method, skipna):
     """Test pnr_image"""
     output = si.pnr_image(
-        np.random.randn(10000, 3, 3), downscale=ds, method=method
+        np.random.randn(10000, 3, 3),
+        downscale=ds,
+        method=method,
+        skipna=skipna
     )
     expected = {1: 7.7, 10: 6.5, 100: 5.2}[ds]
     decimal = -1 if method == "fft" else 0
@@ -99,9 +98,7 @@ def test_var_image(ds, bs, skipna):
     """Test var_image"""
     data = np.arange(180.).reshape(20, 3, 3)
     data[0, 0, 0] = np.nan
-    output = si.var_image(
-        data, downscale=ds, batch_size=bs, skipna=skipna
-    )
+    output = si.var_image(data, downscale=ds, batch_size=bs, skipna=skipna)
     expected = {1: 2693.25, 2: 2673, 5: 2531.25}[ds] * np.ones((3, 3))
     expected[0, 0] = {1: 2430, 2: 2160, 5: 1350}[ds] if skipna else np.nan
     assert_array_almost_equal(expected, output)

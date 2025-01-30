@@ -10,10 +10,42 @@ from aind_ophys_utils.array_utils import _downsample_array, downsample_array
 from aind_ophys_utils.signal_utils import noise_std
 
 
+def nanstd(input, dim=None, correction=1, keepdim=False):
+    """Calculates the standard deviation, ignoring NaNs,
+    over the dimensions specified by dim.
+
+    Parameters
+    ----------
+    input: torch.Tensor
+        The input tensor.
+    dim: int or tuple of ints:
+        The dimension or dimensions to reduce.
+        Default is None, which reduces all dimensions.
+    correction: int
+        Difference between the sample size and sample degrees of freedom.
+        Defaults to Bessel’s correction, correction=1.
+    keepdim: bool
+        Whether the output tensor has dim retained or not.
+
+    Returns
+    -------
+    std: torch.Tensor
+        The standard deviation of the input tensor, ignoring NaNs.
+    """
+    mask = ~torch.isnan(input)
+    mean = torch.nanmean(input, dim=dim, keepdim=True)
+    squared_deviations = torch.square(input - mean) * mask
+    variance = torch.nansum(squared_deviations, dim=dim, keepdim=keepdim) / (
+        mask.sum(dim=dim, keepdim=keepdim) - correction
+    )
+    return torch.sqrt(variance)
+
+
 def local_correlations(
     mov: np.ndarray,
     eight_neighbours: bool = True,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    skipna: bool = False,
 ) -> np.ndarray:
     """Computes the correlation image for the input dataset mov
 
@@ -25,6 +57,8 @@ def local_correlations(
         Use 8 neighbors if true, and 4 if false.
     device: str
         'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    skipna: bool
+        Exclude NaN values when computing the result.
 
     Returns
     -------
@@ -33,16 +67,14 @@ def local_correlations(
     """
     Y = torch.tensor(mov, dtype=torch.float32, device=device)
     rho = torch.zeros(Y.shape[1:], device=device)
-    w_mov = (Y - torch.mean(Y, axis=0)) / (
-        torch.std(Y, axis=0, correction=0) + torch.finfo(torch.float32).eps
+    mean = torch.nanmean if skipna else torch.mean
+    std = nanstd if skipna else torch.std
+    w_mov = (Y - mean(Y, dim=0)) / (
+        std(Y, dim=0, correction=0) + torch.finfo(torch.float32).eps
     )
 
-    rho_h = torch.mean(
-        torch.multiply(w_mov[:, :-1, :], w_mov[:, 1:, :]), axis=0
-    )
-    rho_w = torch.mean(
-        torch.multiply(w_mov[:, :, :-1], w_mov[:, :, 1:]), axis=0
-    )
+    rho_h = mean(torch.multiply(w_mov[:, :-1, :], w_mov[:, 1:, :]), dim=0)
+    rho_w = mean(torch.multiply(w_mov[:, :, :-1], w_mov[:, :, 1:]), dim=0)
 
     rho[:-1, :] += rho_h
     rho[1:, :] += rho_h
@@ -50,10 +82,10 @@ def local_correlations(
     rho[:, 1:] += rho_w
 
     if eight_neighbours:
-        rho_d1 = torch.mean(
+        rho_d1 = mean(
             torch.multiply(w_mov[:, 1:, :-1], w_mov[:, :-1, 1:]), axis=0
         )
-        rho_d2 = torch.mean(
+        rho_d2 = mean(
             torch.multiply(w_mov[:, :-1, :-1], w_mov[:, 1:, 1:,]), axis=0
         )
 
@@ -89,6 +121,7 @@ def max_corr_image(
     bin_size: int = 50,
     eight_neighbours: bool = True,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    skipna: bool = False,
     low_memory: bool = False,
 ) -> np.ndarray:
     """Computes the max-correlation image for the input movie.
@@ -107,6 +140,8 @@ def max_corr_image(
         Use 8 neighbors if true, and 4 if false.
     device: str
         'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    skipna: bool
+        Exclude NaN values when computing the result.
     low_memory: bool
         Setting low_memory to True enforces chunked processing also
         for compressed datasets to save memory.
@@ -121,28 +156,45 @@ def max_corr_image(
     """
     T = mov.shape[0]
     if downscale > 1:
-        T = (T-1) // downscale + 1
+        T = (T - 1) // downscale + 1
     n_bins = max(1, int(np.round(T / bin_size)))
     bins = np.round(np.linspace(0, T, n_bins + 1)).astype(int)
     # downscale first (entire downscaled movie resides in RAM) then chunk
-    if (downscale == 1
-        or n_bins <= 5
-        or (isinstance(mov, h5py.Dataset)
-            and mov.compression
-            and not low_memory)):
+    if (
+        downscale == 1 or
+        n_bins <= 5 or
+        (isinstance(mov, h5py.Dataset) and mov.compression and not low_memory)
+    ):
         if downscale > 1:
-            mov = downsample_array(mov, factors=downscale)
-        return np.max([
-            local_correlations(
-                mov[bins[i]:bins[i + 1]], eight_neighbours, device
-            )
-            for i in range(n_bins)], 0)
+            mov = downsample_array(mov, factors=downscale, skipna=skipna)
+        return np.max(
+            [
+                local_correlations(
+                    mov[bins[i]: bins[i + 1]
+                        ], eight_neighbours, device, skipna=skipna
+                )
+                for i in range(n_bins)
+            ],
+            0,
+        )
     # chunk first then downscale
-    return np.max(ThreadPool().map(lambda i: local_correlations(
-        downsample_array(mov[bins[i]*downscale:bins[i + 1]
-                         * downscale], factors=downscale, n_jobs=1),
-        eight_neighbours, device
-    ), range(n_bins)), 0)
+    return (np.nanmax if skipna else np.max)(
+        ThreadPool().map(
+            lambda i: local_correlations(
+                downsample_array(
+                    mov[bins[i] * downscale: bins[i + 1] * downscale],
+                    factors=downscale,
+                    n_jobs=1,
+                    skipna=skipna,
+                ),
+                eight_neighbours,
+                device,
+                skipna=skipna,
+            ),
+            range(n_bins),
+        ),
+        0,
+    )
 
 
 def pnr_image(
@@ -150,6 +202,7 @@ def pnr_image(
     downscale: int = 10,
     method: str = "welch",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    skipna: bool = False,
 ) -> np.ndarray:
     """Computes the peak-to-noise ratio (PNR) image for the input dataset mov
 
@@ -171,6 +224,8 @@ def pnr_image(
                      using Welch's slower but more accurate method.
     device: str
         'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    skipna: bool
+        Exclude NaN values when computing the result.
 
     Returns
     -------
@@ -178,8 +233,10 @@ def pnr_image(
         peak-to-noise ratio (PNR) image
     """
     if downscale > 1:
-        mov = downsample_array(mov, factors=downscale)
-    noise = noise_std(mov, method, axis=0, device=device)
+        mov = downsample_array(mov, factors=downscale, skipna=skipna)
+    noise = noise_std(mov, method, axis=0, device=device, skipna=skipna)
+    if skipna:
+        return (np.nanmax(mov, 0) - np.nanmedian(mov, 0)) / noise
     return (np.max(mov, 0) - np.median(mov, 0)) / noise
 
 
