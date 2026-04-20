@@ -56,7 +56,7 @@ jobs:
         add: '["README.md"]'
   tag:
     needs: update_badges
-    uses: AllenNeuralDynamics/aind-github-actions/.github/workflows/tag.yml@main
+    uses: AllenNeuralDynamics/.github/.github/workflows/release-bump-version.yml@main
     secrets:
       repo-token: ${{ secrets.SERVICE_TOKEN }}
   publish:
