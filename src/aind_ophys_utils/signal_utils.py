@@ -135,8 +135,8 @@ def _fill_nan(input: np.ndarray) -> np.ndarray:
 
     Returns
     -------
-    input: ndarray
-        In-place modified input array with filled nan values.
+    output: ndarray
+        Copied input array with filled nan values.
     """
     nan_mask = np.isnan(input)
     nan_indices = np.where(nan_mask)[0]
@@ -144,8 +144,9 @@ def _fill_nan(input: np.ndarray) -> np.ndarray:
     interpolated_values = np.interp(
         nan_indices, no_nan_indices, input[no_nan_indices]
     )
-    input[nan_mask] = interpolated_values
-    return input
+    output = input.copy()
+    output[nan_mask] = interpolated_values
+    return output
 
 
 def robust_std(x: np.ndarray, axis: int = -1) -> Union[float, np.ndarray]:
