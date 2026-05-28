@@ -224,40 +224,41 @@ class TestDffFlat:
             assert key in log
         assert log["n_passes"] in (1, 2, 3)
 
-    def test_dff_accepts_legacy_dict(self):
-        """dff() should accept a plain dict and convert it via DffConfig.from_dict."""
+    def test_dff_accepts_dict(self):
+        """dff() should accept a plain dict and splat it into DffConfig."""
         N, T = 2, 600
         F = _flat_F(N=N, T=T, baseline=100.0, noise_sd=1.0)
         config = set_dff_config(F, fs=10.0)
-        # Build a minimal legacy-style dict; omit min_frac_below_f0 and
-        # tukey_param_combos to exercise the from_dict defaults.
-        legacy = {
-            "n_skip":     config.n_skip,
-            "t_rel":      config.t_rel,
-            "x0_all":     config.x0_all,
+        # Dict must contain every DffConfig field — no fallback defaults.
+        d = {
+            "n_skip": config.n_skip,
+            "t_rel": config.t_rel,
+            "x0_all": config.x0_all,
             "bounds_all": config.bounds_all,
-            "sigma_all":  config.sigma_all,
+            "sigma_all": config.sigma_all,
+            "min_frac_below_f0": config.min_frac_below_f0,
+            "tukey_param_combos": config.tukey_param_combos,
         }
-        dff_out, F0, noise_sd, params, logs = dff(F, legacy, n_jobs=1)
+        dff_out, F0, noise_sd, params, logs = dff(F, d, n_jobs=1)
         assert dff_out.shape == (N, T)
         assert F0.shape == (N, T)
         assert len(logs) == N
 
-    def test_from_dict_round_trip(self):
-        """DffConfig.from_dict should accept a full dict including params."""
+    def test_construct_from_dict_round_trip(self):
+        """DffConfig(**d) reconstructs a dataclass from a full field dict."""
         F = _flat_F(N=1, T=300)
         config = set_dff_config(F, fs=10.0)
         d = {
-            "n_skip":             config.n_skip,
-            "t_rel":              config.t_rel,
-            "x0_all":             config.x0_all,
-            "bounds_all":         config.bounds_all,
-            "sigma_all":          config.sigma_all,
-            "min_frac_below_f0":  config.min_frac_below_f0,
+            "n_skip": config.n_skip,
+            "t_rel": config.t_rel,
+            "x0_all": config.x0_all,
+            "bounds_all": config.bounds_all,
+            "sigma_all": config.sigma_all,
+            "min_frac_below_f0": config.min_frac_below_f0,
             "tukey_param_combos": config.tukey_param_combos,
-            "params":             config.params,
+            "params": config.params,
         }
-        rebuilt = DffConfig.from_dict(d)
+        rebuilt = DffConfig(**d)
         assert rebuilt.n_skip == config.n_skip
         assert rebuilt.min_frac_below_f0 == config.min_frac_below_f0
         assert rebuilt.tukey_param_combos == config.tukey_param_combos

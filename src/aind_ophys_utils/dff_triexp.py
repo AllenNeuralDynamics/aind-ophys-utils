@@ -452,28 +452,6 @@ class DffConfig:
     tukey_param_combos: Tuple[Tuple[int, int], ...]
     params: dict = field(default_factory=dict)
 
-    @classmethod
-    def from_dict(cls, d: dict) -> "DffConfig":
-        """Build a DffConfig from a legacy dict (as returned by older versions
-        of ``set_dff_config``).  Missing ``min_frac_below_f0``,
-        ``tukey_param_combos``, and ``params`` keys fall back to defaults.
-        """
-        return cls(
-            n_skip=d["n_skip"],
-            t_rel=d["t_rel"],
-            x0_all=d["x0_all"],
-            bounds_all=d["bounds_all"],
-            sigma_all=d["sigma_all"],
-            min_frac_below_f0=float(d.get("min_frac_below_f0", 0.05)),
-            tukey_param_combos=tuple(
-                tuple(c) for c in d.get(
-                    "tukey_param_combos",
-                    ((2, 3), (2, 4), (2, 5), (3, 4), (3, 5)),
-                )
-            ),
-            params=d.get("params", {}),
-        )
-
 
 def set_dff_config(
     F: np.ndarray,
@@ -729,8 +707,9 @@ def dff(
     F : (N, T) or (T,) array
         Neuropil-corrected fluorescence (same array passed to set_dff_config).
     config : DffConfig or dict
-        Output of set_dff_config().  A legacy dict is also accepted and
-        converted via ``DffConfig.from_dict``.  All model and fitting
+        Output of set_dff_config().  A dict is also accepted, in which case
+        it must contain keys matching the DffConfig field names exactly
+        (it is splatted via ``DffConfig(**config)``).  All model and fitting
         parameters are read from config, including tukey_param_combos.
     n_jobs : int
         Parallel workers (joblib). -1 = all CPUs, 1 = sequential.
@@ -746,7 +725,7 @@ def dff(
                                   for 1D input F, a single dict is returned instead
     """
     if isinstance(config, dict):
-        config = DffConfig.from_dict(config)
+        config = DffConfig(**config)
 
     is_1d = F.ndim == 1
     F2d = np.atleast_2d(np.asarray(F, dtype=np.float64))
