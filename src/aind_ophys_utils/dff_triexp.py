@@ -55,7 +55,7 @@ aind_ophys_utils (for signal_utils.percentile_filter).
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
 import numpy as np
@@ -436,6 +436,11 @@ class DffConfig:
         Threshold for the low-F0 check in Pass 1.
     tukey_param_combos : tuple of (c_pos, c_neg) pairs
         Asymmetric Tukey biweight thresholds swept during fitting.
+    params : dict
+        Optional, unverified snapshot of the scalar inputs to
+        ``set_dff_config`` plus a few derived scalars (n_skip, t_max).
+        Intended as a JSON-loggable reproducibility record; not read by
+        ``dff()``.  Empty by default.
     """
 
     n_skip: int
@@ -445,6 +450,7 @@ class DffConfig:
     sigma_all: np.ndarray
     min_frac_below_f0: float
     tukey_param_combos: Tuple[Tuple[int, int], ...]
+    params: dict = field(default_factory=dict)
 
 
 def set_dff_config(
@@ -548,6 +554,10 @@ def set_dff_config(
             sigma_all          : (N,)      — per-ROI noise std (MAD)
             min_frac_below_f0  : float     — passed through to dff()
             tukey_param_combos : tuple     — passed through to dff()
+            params             : dict      — JSON-serializable snapshot of scalar
+                                              inputs + derived scalars (n_skip,
+                                              t_max).  For reproducibility logging;
+                                              not read by dff().
     """
     if not (0 <= min_frac_below_f0 < 1):
         raise ValueError(
@@ -660,6 +670,28 @@ def set_dff_config(
         sigma_all=sigma_all,
         min_frac_below_f0=min_frac_below_f0,
         tukey_param_combos=tukey_param_combos,
+        params={
+            "ts_provided":              bool(ts_provided),
+            "fs":                       float(fs) if not ts_provided else None,
+            "skip_initial_s":           float(skip_initial_s),
+            "n_skip":                   int(n_skip),
+            "t_max":                    float(t_max),
+            "b_inf_n_frames":           int(b_inf_n_frames),
+            "t_fast_init_s":            float(t_fast_init_s),
+            "b_slow_max_factor":        float(b_slow_max_factor),
+            "b_bright_max_factor":      float(b_bright_max_factor),
+            "b_fast_ptp_window_s":      float(b_fast_ptp_window_s),
+            "b_inf_lb_factor":          float(b_inf_lb_factor),
+            "t_fast_min_s":             float(t_fast_min_s),
+            "t_fast_max_s":             float(t_fast_max_s),
+            "t_slow_min_s":             float(t_slow_min_s),
+            "t_bright_min_s":           float(t_bright_min_s),
+            "t_slow_min_tmax_factor":   float(t_slow_min_tmax_factor),
+            "t_bright_min_tmax_factor": float(t_bright_min_tmax_factor),
+            "t_high_factor":            float(t_high_factor),
+            "min_frac_below_f0":        float(min_frac_below_f0),
+            "tukey_param_combos":       [list(c) for c in tukey_param_combos],
+        },
     )
 
 
