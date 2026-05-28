@@ -752,12 +752,12 @@ def dff(
     F2d = np.atleast_2d(np.asarray(F, dtype=np.float64))
     N, T = F2d.shape
 
-    n_skip             = config.n_skip
-    t_rel              = config.t_rel
-    x0_all             = config.x0_all
-    bounds_all         = config.bounds_all
-    sigma_all          = config.sigma_all
-    min_frac_below_f0  = config.min_frac_below_f0
+    n_skip = config.n_skip
+    t_rel = config.t_rel
+    x0_all = config.x0_all
+    bounds_all = config.bounds_all
+    sigma_all = config.sigma_all
+    min_frac_below_f0 = config.min_frac_below_f0
     tukey_param_combos = config.tukey_param_combos
 
     F_fit = F2d[:, n_skip:]
@@ -775,8 +775,8 @@ def dff(
         )
 
     winner_F0_fit = np.stack([r[0] for r in rows])   # (N, T_fit)
-    params_all    = np.stack([r[1] for r in rows])   # (N, 7)
-    logs          = [r[2] for r in rows]
+    params_all = np.stack([r[1] for r in rows])   # (N, 7)
+    logs = [r[2] for r in rows]
 
     F0_full = np.empty((N, T), dtype=np.float32)
     if n_skip > 0:
