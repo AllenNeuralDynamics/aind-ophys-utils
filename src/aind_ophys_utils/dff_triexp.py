@@ -421,6 +421,11 @@ class DffConfig:
 
     Attributes
     ----------
+    params : dict
+        Optional, unverified snapshot of the scalar inputs to
+        ``set_dff_config`` plus a few derived scalars (n_skip, t_max).
+        Intended as a JSON-loggable reproducibility record; not read by
+        ``dff()``.  Empty by default.  Keyword-only.
     n_skip : int
         Frames removed from the start of the trace before fitting.
     t_rel : (T_fit,) np.ndarray
@@ -436,13 +441,9 @@ class DffConfig:
         Threshold for the low-F0 check in Pass 1.
     tukey_param_combos : tuple of (c_pos, c_neg) pairs
         Asymmetric Tukey biweight thresholds swept during fitting.
-    params : dict
-        Optional, unverified snapshot of the scalar inputs to
-        ``set_dff_config`` plus a few derived scalars (n_skip, t_max).
-        Intended as a JSON-loggable reproducibility record; not read by
-        ``dff()``.  Empty by default.
     """
 
+    params: dict = field(default_factory=dict, kw_only=True)
     n_skip: int
     t_rel: np.ndarray
     x0_all: np.ndarray
@@ -450,7 +451,6 @@ class DffConfig:
     sigma_all: np.ndarray
     min_frac_below_f0: float
     tukey_param_combos: Tuple[Tuple[int, int], ...]
-    params: dict = field(default_factory=dict)
 
 
 def set_dff_config(
@@ -545,6 +545,10 @@ def set_dff_config(
     -------
     DffConfig
         Frozen dataclass with fields:
+            params             : dict      — JSON-serializable snapshot of scalar
+                                              inputs + derived scalars (n_skip,
+                                              t_max).  For reproducibility logging;
+                                              not read by dff().
             n_skip             : int        — frames removed from the start
             t_rel              : (T_fit,)  — timestamps of the fit window relative
                                               to session start (s); starts at
@@ -554,10 +558,6 @@ def set_dff_config(
             sigma_all          : (N,)      — per-ROI noise std (MAD)
             min_frac_below_f0  : float     — passed through to dff()
             tukey_param_combos : tuple     — passed through to dff()
-            params             : dict      — JSON-serializable snapshot of scalar
-                                              inputs + derived scalars (n_skip,
-                                              t_max).  For reproducibility logging;
-                                              not read by dff().
     """
     if not (0 <= min_frac_below_f0 < 1):
         raise ValueError(
@@ -663,13 +663,6 @@ def set_dff_config(
     )
 
     return DffConfig(
-        n_skip=n_skip,
-        t_rel=t_rel,
-        x0_all=x0_all,
-        bounds_all=bounds_all,
-        sigma_all=sigma_all,
-        min_frac_below_f0=min_frac_below_f0,
-        tukey_param_combos=tukey_param_combos,
         params={
             "ts_provided":              bool(ts_provided),
             "fs":                       float(fs) if not ts_provided else None,
@@ -692,6 +685,13 @@ def set_dff_config(
             "min_frac_below_f0":        float(min_frac_below_f0),
             "tukey_param_combos":       [list(c) for c in tukey_param_combos],
         },
+        n_skip=n_skip,
+        t_rel=t_rel,
+        x0_all=x0_all,
+        bounds_all=bounds_all,
+        sigma_all=sigma_all,
+        min_frac_below_f0=min_frac_below_f0,
+        tukey_param_combos=tukey_param_combos,
     )
 
 

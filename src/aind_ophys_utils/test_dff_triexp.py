@@ -2,6 +2,7 @@
 
 Run with:  pytest test_dff_triexp.py -v
 """
+import json
 import warnings
 
 import numpy as np
@@ -96,6 +97,27 @@ class TestTRelStartsAtSkip:
                 "t_rel must not start near zero — bleaching model must be "
                 "evaluated at the correct physical time (~skip_initial_s)"
             )
+
+
+# ---------------------------------------------------------------------------
+# 2. params dict is JSON-serializable
+# ---------------------------------------------------------------------------
+
+class TestParamsJsonSerializable:
+    def test_default_params(self):
+        F = _flat_F()
+        config = set_dff_config(F, fs=10.0)
+        serialised = json.dumps(config.params)  # must not raise
+        roundtrip = json.loads(serialised)
+        assert roundtrip["fs"] == 10.0
+        assert roundtrip["min_frac_below_f0"] == 0.05
+        assert isinstance(roundtrip["tukey_param_combos"], list)
+
+    def test_custom_combos_serializable(self):
+        F = _flat_F()
+        config = set_dff_config(F, fs=10.0, tukey_param_combos=((2, 3), (3, 5)))
+        roundtrip = json.loads(json.dumps(config.params))
+        assert roundtrip["tukey_param_combos"] == [[2, 3], [3, 5]]
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +271,7 @@ class TestDffFlat:
         F = _flat_F(N=1, T=300)
         config = set_dff_config(F, fs=10.0)
         d = {
+            "params": config.params,
             "n_skip": config.n_skip,
             "t_rel": config.t_rel,
             "x0_all": config.x0_all,
@@ -256,7 +279,6 @@ class TestDffFlat:
             "sigma_all": config.sigma_all,
             "min_frac_below_f0": config.min_frac_below_f0,
             "tukey_param_combos": config.tukey_param_combos,
-            "params": config.params,
         }
         rebuilt = DffConfig(**d)
         assert rebuilt.n_skip == config.n_skip
