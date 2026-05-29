@@ -8,11 +8,14 @@ import warnings
 import numpy as np
 import pytest
 
+from aind_ophys_utils.baseline_fitting import AsymmetricTukeyBiweight
 from aind_ophys_utils.dff_triexp import (
     DffConfig,
     _biexp_bright,
     _boundary_fit_error,
+    _compute_sigma_relax,
     _is_low_f0,
+    _select_winner,
     dff,
     set_dff_config,
 )
@@ -421,3 +424,189 @@ class TestBoundaryFitError:
         params = np.array([100., 0., 0., 80., 1800., 60., 2.0 * t_max])
         F_roi = np.full(len(t), 200.0)
         assert _boundary_fit_error(params, F_roi, t, dt) is False
+
+
+# ---------------------------------------------------------------------------
+# 9. _compute_sigma_relax
+# ---------------------------------------------------------------------------
+
+class TestComputeSigmaRelax:
+    """Verify _compute_sigma_relax's early-return vs. brentq branch."""
+
+    def test_returns_sigma_when_weights_above_half_at_2(self):
+        """When min(M.weights(±2)) >= 0.5, sigma is returned unchanged."""
+        M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
+        assert _compute_sigma_relax(M, 1.0) == 1.0
+
+    def test_relaxes_sigma_when_weights_below_half_at_2(self):
+        """When c is small enough that weights drop below 0.5 inside [0, 2], sigma is scaled up."""
+        M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=2.0)
+        out = _compute_sigma_relax(M, 1.0)
+        assert out > 1.0
+
+
+# ---------------------------------------------------------------------------
+# 10. _select_winner filter early-exits
+# ---------------------------------------------------------------------------
+
+class TestSelectWinner:
+    """Verify each eligibility filter in _select_winner can drop a combo."""
+
+    def _t(self, T=600, fs=10.0, skip=5.0):
+        """Build a t_rel vector starting at ``skip`` seconds."""
+        return (np.arange(T) + int(skip * fs)) / fs
+
+    def test_skips_combo_with_too_few_negatives(self):
+        """Filter 1: <=10 negative residuals → combo dropped (line 222)."""
+        t = self._t()
+        F_row = np.full(len(t), 100.0)  # exactly above F0 everywhere
+        # F0_analytic just below F_row → all residuals positive, none negative.
+        params = np.array([99.0, 0., 0., 0., 1800., 60., 600.])
+        f0 = _biexp_bright(params, t).astype(np.float32)
+        dt = float(np.median(np.diff(t)))
+        winner = _select_winner(
+            F_row, {(2, 3): f0}, {(2, 3): params},
+            target=1.0, t_rel=t, dt=dt, combos=((2, 3),),
+        )
+        assert winner is None
+
+    def test_skips_combo_with_non_finite_med_neg(self):
+        """Filter 1b: med_neg non-finite → combo dropped (line 225).
+
+        Force ``neg`` to contain only ±inf so np.median(np.abs(neg)) is inf
+        (not finite), triggering the second early-exit of Filter 1.
+        """
+        t = self._t()
+        F_row = np.full(len(t), 100.0)
+        fake_f0 = np.full(len(t), np.inf, dtype=np.float32)  # all resids = -inf
+        params = np.array([100., 0., 0., 0., 1800., 60., 600.])
+        dt = float(np.median(np.diff(t)))
+        winner = _select_winner(
+            F_row, {(2, 3): fake_f0}, {(2, 3): params},
+            target=1.0, t_rel=t, dt=dt, combos=((2, 3),),
+        )
+        assert winner is None
+
+    def test_skips_combo_with_low_analytic_f0(self):
+        """Filter 2: analytic F0 min < 1.0 → combo dropped (line 230).
+
+        Use a hand-crafted F0_analytic in the dict (above F_row so Filter 1
+        passes with many negative residuals) while ``params`` independently
+        yield an analytic F0 of 0.5 (below the 1.0 floor).
+        """
+        t = self._t()
+        F_row = np.full(len(t), 100.0)
+        # All residuals = 100 - 105 = -5 → many negatives → Filter 1 passes.
+        fake_f0 = np.full(len(t), 105.0, dtype=np.float32)
+        params = np.array([0.5, 0., 0., 0., 1800., 60., 600.])  # analytic F0 = 0.5
+        dt = float(np.median(np.diff(t)))
+        winner = _select_winner(
+            F_row, {(2, 3): fake_f0}, {(2, 3): params},
+            target=1.0, t_rel=t, dt=dt, combos=((2, 3),),
+        )
+        assert winner is None
+
+    def test_skips_combo_with_boundary_error(self):
+        """Filter 3: _boundary_fit_error returns True → combo dropped (line 234).
+
+        F_row at constant 150 makes residuals against a 200-valued ``fake_f0``
+        all negative (Filter 1 passes) and stays above the params-derived F0
+        throughout the early window, so _boundary_fit_error fires Pattern A.
+        Params keep analytic F0 ≥ ~23 so Filter 2 also passes.
+        """
+        t = self._t(T=3600, fs=1.0, skip=5.0)
+        F_row = np.full(len(t), 150.0)
+        fake_f0 = np.full(len(t), 200.0, dtype=np.float32)
+        params = np.array([100., 0., 0., 80., 1800., 60., 150.])
+        dt = float(np.median(np.diff(t)))
+        winner = _select_winner(
+            F_row, {(2, 3): fake_f0}, {(2, 3): params},
+            target=1.0, t_rel=t, dt=dt, combos=((2, 3),),
+        )
+        assert winner is None
+
+
+# ---------------------------------------------------------------------------
+# 11. Pass-escalation paths (pass 1 low_f0 → pass 2 / pass 3 fallback)
+# ---------------------------------------------------------------------------
+
+class TestPassEscalation:
+    """Cover pass-2 entry, pass-2 success, and pass-3 fallback paths in _process_roi."""
+
+    def test_pass_2_entered_via_low_f0_check(self):
+        """A very large min_frac_below_f0 forces every pass-1 winner to be low_f0."""
+        F = _flat_F(N=1, T=600, baseline=100.0, noise_sd=1.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # >0.5 emits a UserWarning
+            config = set_dff_config(F, fs=10.0, min_frac_below_f0=0.95)
+        _, _, _, _, logs = dff(F, config, n_jobs=1)
+        assert logs[0]["pass1_trigger"] == "low_f0"
+        # Pass 2 will return a winner for a well-behaved flat signal.
+        assert logs[0]["n_passes"] == 2
+
+    def test_pass_3_fallback_when_select_winner_always_none(self, monkeypatch):
+        """Monkeypatch _select_winner to None → pass 1 no_winner, pass 2 no winner,
+        pass 3 falls back to the first combo (line 405)."""
+        from aind_ophys_utils import dff_triexp as mod
+
+        monkeypatch.setattr(mod, "_select_winner", lambda *a, **kw: None)
+        F = _flat_F(N=1, T=600, baseline=100.0, noise_sd=1.0)
+        config = set_dff_config(F, fs=10.0)
+        _, _, _, _, logs = dff(F, config, n_jobs=1)
+        assert logs[0]["pass1_trigger"] == "no_winner"
+        assert logs[0]["n_passes"] == 3
+        # Fallback at line 405 picks combos[0].
+        assert logs[0]["winner_combo"] == config.tukey_param_combos[0]
+
+    def test_pass_3_on_bleach_trace_hits_used_x0_b(self, monkeypatch):
+        """Bleach trace + always-None _select_winner → pass 3's dual-x0 ladder
+        finds at least one combo where the pass-2 params beat the default x0
+        starting point, hitting the ``used_x0_B = True`` branch (line 391).
+        """
+        from aind_ophys_utils import dff_triexp as mod
+
+        monkeypatch.setattr(mod, "_select_winner", lambda *a, **kw: None)
+        F_full, _, ts, _ = _bleach_F(T=1200, fs=1.0, skip=5.0, noise_sd=0.3)
+        F = F_full[np.newaxis, :]
+        config = set_dff_config(
+            F, fs=1.0, ts=ts, b_inf_lb_factor=0.5, b_slow_max_factor=3.0,
+        )
+        _, _, _, _, logs = dff(F, config, n_jobs=1)
+        # At least one combo should record used_x0_B=True in its pass-3 log.
+        any_used_b = any(
+            entry.get("used_x0_B", False)
+            for entry in logs[0]["pass3"].values()
+        )
+        assert any_used_b, "expected at least one pass-3 combo to use x0_B"
+
+
+# ---------------------------------------------------------------------------
+# 12. set_dff_config edge cases
+# ---------------------------------------------------------------------------
+
+class TestSetConfigEdgeCases:
+    """Edge cases that exercise the value-error path in set_dff_config."""
+
+    def test_t_fit_zero_raises(self):
+        """When skip_initial_s consumes the whole trace, T_fit == 0 raises (line 606)."""
+        F = _flat_F(N=1, T=40)
+        with pytest.raises(ValueError, match="No frames remain"):
+            set_dff_config(F, fs=10.0, skip_initial_s=5.0)
+
+
+# ---------------------------------------------------------------------------
+# 13. Parallel branch in dff()
+# ---------------------------------------------------------------------------
+
+class TestDffParallel:
+    """Exercise the joblib Parallel branch (n_jobs != 1) of dff()."""
+
+    def test_dff_with_n_jobs_2(self):
+        """n_jobs=2 dispatches via joblib.Parallel (line 752 in dff_triexp)."""
+        N, T = 2, 600
+        F = _flat_F(N=N, T=T, baseline=100.0, noise_sd=1.0)
+        config = set_dff_config(F, fs=10.0)
+        dff_out, F0, noise_sd, params, logs = dff(F, config, n_jobs=2)
+        assert dff_out.shape == (N, T)
+        assert F0.shape == (N, T)
+        assert len(logs) == N

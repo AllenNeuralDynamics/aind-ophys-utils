@@ -21,6 +21,7 @@ dependencies = [
     'imageio-ffmpeg',
     'jax',
     'joblib',
+    'matplotlib',
     'pandas',
     'scikit-image',
     'statsmodels',
