@@ -55,6 +55,7 @@ aind_ophys_utils (for signal_utils.percentile_filter).
 from __future__ import annotations
 
 import warnings
+from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
 import numpy as np
@@ -413,6 +414,45 @@ def _process_roi(
 # Public API
 # ---------------------------------------------------------------------------
 
+
+@dataclass(frozen=True)
+class DffConfig:
+    """Pre-computed per-ROI fit setup returned by ``set_dff_config``.
+
+    Attributes
+    ----------
+    params : dict
+        Optional, unverified snapshot of the scalar inputs to
+        ``set_dff_config`` plus a few derived scalars (n_skip, t_max).
+        Intended as a JSON-loggable reproducibility record; not read by
+        ``dff()``.  Empty by default.  Keyword-only.
+    n_skip : int
+        Frames removed from the start of the trace before fitting.
+    t_rel : (T_fit,) np.ndarray
+        Timestamps of the fit window relative to session start (s).
+    x0_all : (N, 7) np.ndarray
+        Per-ROI initial parameter vectors
+        [b_inf, b_slow, b_fast, b_bright, t_slow, t_fast, t_bright].
+    bounds_all : list[list[tuple]]
+        Per-ROI bounds — outer list length N, inner list of 7 (lb, ub) tuples.
+    sigma_all : (N,) np.ndarray
+        Per-ROI noise std (MAD).
+    min_frac_below_f0 : float
+        Threshold for the low-F0 check in Pass 1.
+    tukey_param_combos : tuple of (c_pos, c_neg) pairs
+        Asymmetric Tukey biweight thresholds swept during fitting.
+    """
+
+    params: dict = field(default_factory=dict, kw_only=True)
+    n_skip: int
+    t_rel: np.ndarray
+    x0_all: np.ndarray
+    bounds_all: list
+    sigma_all: np.ndarray
+    min_frac_below_f0: float
+    tukey_param_combos: Tuple[Tuple[int, int], ...]
+
+
 def set_dff_config(
     F: np.ndarray,
     fs: float = 30.0,
@@ -441,11 +481,11 @@ def set_dff_config(
     tukey_param_combos: Tuple[Tuple[int, int], ...] = (
         (2, 3), (2, 4), (2, 5), (3, 4), (3, 5)
     ),
-) -> dict:
+) -> DffConfig:
     """Pre-compute per-ROI initial values, bounds, and noise estimates.
 
-    All parameters are plain numbers (no arrays). The returned dict is passed
-    directly to dff().
+    All parameters are plain numbers (no arrays). The returned DffConfig is
+    passed directly to dff().
 
     Parameters
     ----------
@@ -503,20 +543,21 @@ def set_dff_config(
 
     Returns
     -------
-    dict with keys:
-        params          : dict       — all scalar input parameters (JSON-serializable);
-                                       sufficient to reproduce this config given the
-                                       same F and ts arrays.  params["ts_provided"]
-                                       indicates which mode was used; params["fs"] is
-                                       None when ts was provided (fs was ignored)
-        n_skip          : int        — frames removed from the start
-        t_rel           : (T_fit,)  — timestamps of the fit window relative to
-                                       session start (s); starts at ~skip_initial_s
-        x0_all          : (N, 7)    — per-ROI initial parameter vectors
-        bounds_all      : list[N]   — per-ROI bounds (list of 7 (lb, ub) tuples)
-        sigma_all       : (N,)      — per-ROI noise std (MAD)
-        min_frac_below_f0 : float   — passed through to dff()
-        tukey_param_combos : tuple  — passed through to dff()
+    DffConfig
+        Frozen dataclass with fields:
+            params             : dict      — JSON-serializable snapshot of scalar
+                                              inputs + derived scalars (n_skip,
+                                              t_max).  For reproducibility logging;
+                                              not read by dff().
+            n_skip             : int        — frames removed from the start
+            t_rel              : (T_fit,)  — timestamps of the fit window relative
+                                              to session start (s); starts at
+                                              ~skip_initial_s
+            x0_all             : (N, 7)    — per-ROI initial parameter vectors
+            bounds_all         : list[N]   — per-ROI bounds (list of 7 (lb, ub) tuples)
+            sigma_all          : (N,)      — per-ROI noise std (MAD)
+            min_frac_below_f0  : float     — passed through to dff()
+            tukey_param_combos : tuple     — passed through to dff()
     """
     if not (0 <= min_frac_below_f0 < 1):
         raise ValueError(
@@ -621,8 +662,8 @@ def set_dff_config(
         _noise_std(F_fit, method="mad", device="cpu"), dtype=np.float64
     )
 
-    return {
-        "params": {
+    return DffConfig(
+        params={
             "ts_provided":              bool(ts_provided),
             "fs":                       float(fs) if not ts_provided else None,
             "skip_initial_s":           float(skip_initial_s),
@@ -644,19 +685,19 @@ def set_dff_config(
             "min_frac_below_f0":        float(min_frac_below_f0),
             "tukey_param_combos":       [list(c) for c in tukey_param_combos],
         },
-        "n_skip":             n_skip,
-        "t_rel":              t_rel,
-        "x0_all":             x0_all,
-        "bounds_all":         bounds_all,
-        "sigma_all":          sigma_all,
-        "min_frac_below_f0":  min_frac_below_f0,
-        "tukey_param_combos": tukey_param_combos,
-    }
+        n_skip=n_skip,
+        t_rel=t_rel,
+        x0_all=x0_all,
+        bounds_all=bounds_all,
+        sigma_all=sigma_all,
+        min_frac_below_f0=min_frac_below_f0,
+        tukey_param_combos=tukey_param_combos,
+    )
 
 
 def dff(
     F: np.ndarray,
-    config: dict,
+    config: "DffConfig | dict",
     n_jobs: int = -1,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list]:
     """Fit biexp_bright_v1 and return dFF, F0, noise_sd, params, and logs.
@@ -665,9 +706,11 @@ def dff(
     ----------
     F : (N, T) or (T,) array
         Neuropil-corrected fluorescence (same array passed to set_dff_config).
-    config : dict
-        Output of set_dff_config().  All model and fitting parameters are
-        read from config, including tukey_param_combos.
+    config : DffConfig or dict
+        Output of set_dff_config().  A dict is also accepted, in which case
+        it must contain keys matching the DffConfig field names exactly
+        (it is splatted via ``DffConfig(**config)``).  All model and fitting
+        parameters are read from config, including tukey_param_combos.
     n_jobs : int
         Parallel workers (joblib). -1 = all CPUs, 1 = sequential.
 
@@ -681,23 +724,20 @@ def dff(
     logs : list[dict]          — per-ROI pass diagnostics (length N);
                                   for 1D input F, a single dict is returned instead
     """
+    if isinstance(config, dict):
+        config = DffConfig(**config)
+
     is_1d = F.ndim == 1
     F2d = np.atleast_2d(np.asarray(F, dtype=np.float64))
     N, T = F2d.shape
 
-    n_skip             = config["n_skip"]
-    t_rel              = config["t_rel"]
-    x0_all             = config["x0_all"]
-    bounds_all         = config["bounds_all"]
-    sigma_all          = config["sigma_all"]
-    # .get() fallbacks support configs built before these keys were added
-    min_frac_below_f0  = float(config.get("min_frac_below_f0", 0.05))
-    tukey_param_combos = tuple(
-        tuple(c) for c in config.get(
-            "tukey_param_combos",
-            ((2, 3), (2, 4), (2, 5), (3, 4), (3, 5)),
-        )
-    )
+    n_skip = config.n_skip
+    t_rel = config.t_rel
+    x0_all = config.x0_all
+    bounds_all = config.bounds_all
+    sigma_all = config.sigma_all
+    min_frac_below_f0 = config.min_frac_below_f0
+    tukey_param_combos = config.tukey_param_combos
 
     F_fit = F2d[:, n_skip:]
 
@@ -714,8 +754,8 @@ def dff(
         )
 
     winner_F0_fit = np.stack([r[0] for r in rows])   # (N, T_fit)
-    params_all    = np.stack([r[1] for r in rows])   # (N, 7)
-    logs          = [r[2] for r in rows]
+    params_all = np.stack([r[1] for r in rows])   # (N, 7)
+    logs = [r[2] for r in rows]
 
     F0_full = np.empty((N, T), dtype=np.float32)
     if n_skip > 0:

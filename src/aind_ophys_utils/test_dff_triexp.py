@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from aind_ophys_utils.dff_triexp import (
+    DffConfig,
     _biexp_bright,
     _boundary_fit_error,
     _is_low_f0,
@@ -73,18 +74,18 @@ class TestTRelStartsAtSkip:
         F = _flat_F(N=1, T=T)
         config = set_dff_config(F, fs=fs, ts=ts, skip_initial_s=skip)
 
-        assert config["n_skip"] == int(np.searchsorted(ts - ts[0], skip))
-        assert pytest.approx(config["t_rel"][0], abs=1e-9) == skip
-        assert len(config["t_rel"]) == T - config["n_skip"]
+        assert config.n_skip == int(np.searchsorted(ts - ts[0], skip))
+        assert pytest.approx(config.t_rel[0], abs=1e-9) == skip
+        assert len(config.t_rel) == T - config.n_skip
 
     def test_without_ts(self):
         T, fs, skip = 600, 10.0, 5.0
         F = _flat_F(N=1, T=T)
         config = set_dff_config(F, fs=fs, skip_initial_s=skip)
 
-        assert config["n_skip"] == int(skip * fs)
+        assert config.n_skip == int(skip * fs)
         # t_rel[0] = (0 + n_skip) / fs = skip
-        assert pytest.approx(config["t_rel"][0], abs=1e-9) == skip
+        assert pytest.approx(config.t_rel[0], abs=1e-9) == skip
 
     def test_t_rel_never_starts_at_zero(self):
         """Regression: old code started t_rel at 0, not skip_initial_s."""
@@ -92,7 +93,7 @@ class TestTRelStartsAtSkip:
         for use_ts in (True, False):
             ts = np.arange(600) / 10.0 if use_ts else None
             config = set_dff_config(F, fs=10.0, ts=ts, skip_initial_s=5.0)
-            assert config["t_rel"][0] > 1.0, (
+            assert config.t_rel[0] > 1.0, (
                 "t_rel must not start near zero — bleaching model must be "
                 "evaluated at the correct physical time (~skip_initial_s)"
             )
@@ -106,7 +107,7 @@ class TestParamsJsonSerializable:
     def test_default_params(self):
         F = _flat_F()
         config = set_dff_config(F, fs=10.0)
-        serialised = json.dumps(config["params"])  # must not raise
+        serialised = json.dumps(config.params)  # must not raise
         roundtrip = json.loads(serialised)
         assert roundtrip["fs"] == 10.0
         assert roundtrip["min_frac_below_f0"] == 0.05
@@ -115,16 +116,8 @@ class TestParamsJsonSerializable:
     def test_custom_combos_serializable(self):
         F = _flat_F()
         config = set_dff_config(F, fs=10.0, tukey_param_combos=((2, 3), (3, 5)))
-        roundtrip = json.loads(json.dumps(config["params"]))
+        roundtrip = json.loads(json.dumps(config.params))
         assert roundtrip["tukey_param_combos"] == [[2, 3], [3, 5]]
-
-    def test_params_contains_derived_scalars(self):
-        T, fs, skip = 300, 5.0, 5.0
-        F = _flat_F(N=1, T=T)
-        config = set_dff_config(F, fs=fs, skip_initial_s=skip)
-        p = config["params"]
-        assert p["n_skip"] == int(skip * fs)
-        assert p["t_max"] == pytest.approx(config["t_rel"][-1], rel=1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +246,46 @@ class TestDffFlat:
             assert key in log
         assert log["n_passes"] in (1, 2, 3)
 
+    def test_dff_accepts_dict(self):
+        """dff() should accept a plain dict and splat it into DffConfig."""
+        N, T = 2, 600
+        F = _flat_F(N=N, T=T, baseline=100.0, noise_sd=1.0)
+        config = set_dff_config(F, fs=10.0)
+        # Dict must contain every DffConfig field — no fallback defaults.
+        d = {
+            "n_skip": config.n_skip,
+            "t_rel": config.t_rel,
+            "x0_all": config.x0_all,
+            "bounds_all": config.bounds_all,
+            "sigma_all": config.sigma_all,
+            "min_frac_below_f0": config.min_frac_below_f0,
+            "tukey_param_combos": config.tukey_param_combos,
+        }
+        dff_out, F0, noise_sd, params, logs = dff(F, d, n_jobs=1)
+        assert dff_out.shape == (N, T)
+        assert F0.shape == (N, T)
+        assert len(logs) == N
+
+    def test_construct_from_dict_round_trip(self):
+        """DffConfig(**d) reconstructs a dataclass from a full field dict."""
+        F = _flat_F(N=1, T=300)
+        config = set_dff_config(F, fs=10.0)
+        d = {
+            "params": config.params,
+            "n_skip": config.n_skip,
+            "t_rel": config.t_rel,
+            "x0_all": config.x0_all,
+            "bounds_all": config.bounds_all,
+            "sigma_all": config.sigma_all,
+            "min_frac_below_f0": config.min_frac_below_f0,
+            "tukey_param_combos": config.tukey_param_combos,
+        }
+        rebuilt = DffConfig(**d)
+        assert rebuilt.n_skip == config.n_skip
+        assert rebuilt.min_frac_below_f0 == config.min_frac_below_f0
+        assert rebuilt.tukey_param_combos == config.tukey_param_combos
+        assert rebuilt.params == config.params
+
 
 # ---------------------------------------------------------------------------
 # 6. dff() — synthetic bleaching recovery
@@ -275,7 +308,7 @@ class TestDffSyntheticBleach:
         )
         _, F0_out, _, _, _ = dff(F, config, n_jobs=1)
 
-        n_skip = config["n_skip"]
+        n_skip = config.n_skip
         F0_fit = F0_out[0, n_skip:].astype(np.float64)
         amplitude = float(F0_true.max() - F0_true.min())
 

@@ -277,7 +277,7 @@ class TukeyBiweight(AsymmetricTukeyBiweight):
 # -----------------------------
 #  Fitting Functions
 # -----------------------------
-def nonlinear_fit(
+def nonlinear_fit(  # noqa: C901
     # --- data / model ---
     trace: np.ndarray,
     t: np.ndarray,
@@ -599,7 +599,7 @@ def nonlinear_fit(
     _bnd_list = list(bounds) if bounds else [(None, None)] * len(np.asarray(x0))
     lo_bb = _bnd_list[_B_BRIGHT_IDX][0]
     _bnd_list[_B_BRIGHT_IDX] = (lo_bb if lo_bb is not None else 0.0,
-                                 b_bright_ub if b_bright_ub > 0 else None)
+                                b_bright_ub if b_bright_ub > 0 else None)
     con_bounds = tuple(_bnd_list)
 
     x0_B_np = x_2_np.copy()
@@ -1021,7 +1021,7 @@ def fit_baseline(
 # -----------------------------
 #  Plotting Functions
 # -----------------------------
-def plot_dff(F, F0, F0trend, t=None, zoom_duration=60.0, roi_id=None):
+def plot_dff(F, F0, F0trend, t=None, zoom_duration=60.0, roi_id=None):  # noqa: C901
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
     if t is None:
