@@ -260,13 +260,18 @@ def test_downsample(array, factors, strategy, dtype, expected):
 def test_downsample_compressed_h5(factors, strategy, chunks, expected):
     """Test downsample_array of compressed h5 file"""
     with tempfile.TemporaryDirectory() as tmpdirname:
-        with h5py.File(tmpdirname + "/test_gzip.h5", "w") as f:
+        h5_path = tmpdirname + "/test_gzip.h5"
+        # Write the file, then close before spawning workers — otherwise the
+        # parent's writer lock blocks the child processes from opening the file
+        # inside Pool/ThreadPool (BlockingIOError on macOS).
+        with h5py.File(h5_path, "w") as f:
             f.create_dataset(
                 "data",
                 data=np.arange(200000).reshape(100, 2000),
                 chunks=chunks,
                 compression="gzip",
             )
+        with h5py.File(h5_path, "r") as f:
             array = f["data"]
             array_out = au.downsample_array(
                 array=array, factors=factors, strategy=strategy, skipna=False
