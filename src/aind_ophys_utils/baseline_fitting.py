@@ -1,3 +1,9 @@
+"""Robust baseline fitting utilities.
+
+Provides M-estimator norms (Tukey biweight variants) and the
+``nonlinear_fit`` IRLS routine used to fit triexponential bleach baselines.
+Also exposes a robust LOWESS smoother and a plotting helper.
+"""
 import inspect
 from functools import partial
 from typing import Callable, Literal
@@ -191,6 +197,7 @@ class AsymmetricTukeyBiweight(RobustNorm):
     """
 
     def __init__(self, c_pos: float = 4.685, c_neg: float = 4.685, xp=np):
+        """Validate tuning constants and pre-compute the rho normalization factors."""
         if c_pos <= 0 or c_neg <= 0:
             raise ValueError("Tuning constants must be positive")
         self.c_pos = c_pos
@@ -200,12 +207,14 @@ class AsymmetricTukeyBiweight(RobustNorm):
         self.xp = xp
 
     def _rho_half(self, z, c: float, factor: float):
+        """Tukey rho on one half-line: quadratic for |z|<=c, capped at ``factor``."""
         if np.isinf(c):  # Python-level scalar check, safe inside JAX traces
             return 0.5 * z**2
         t2 = (z / c) ** 2
         return self.xp.where(t2 <= 1, factor * (1 - (1 - t2) ** 3), factor)
 
     def rho(self, z):
+        """Asymmetric Tukey rho — branches on the sign of ``z``."""
         z = self.xp.asarray(z)
         return self.xp.where(
             z > 0,
@@ -214,16 +223,19 @@ class AsymmetricTukeyBiweight(RobustNorm):
         )
 
     def psi(self, z):
+        """Influence function (derivative of rho); zero outside the cutoff."""
         z = self.xp.asarray(z)
         c = self.xp.where(z > 0, self.c_pos, self.c_neg).astype(z.dtype)
         return self.xp.where(self.xp.abs(z) <= c, z * (1 - (z / c) ** 2) ** 2, 0.0)
 
     def weights(self, z):
+        """IRLS weights — psi(z) / z; zero outside the cutoff."""
         z = self.xp.asarray(z)
         c = self.xp.where(z > 0, self.c_pos, self.c_neg).astype(z.dtype)
         return self.xp.where(self.xp.abs(z) <= c, (1 - (z / c) ** 2) ** 2, 0.0)
 
     def psi_deriv(self, z):
+        """Derivative of psi; used for Hessian approximations."""
         z = self.xp.asarray(z)
         c = self.xp.where(z > 0, self.c_pos, self.c_neg).astype(z.dtype)
         t2 = (z / c) ** 2
@@ -232,6 +244,7 @@ class AsymmetricTukeyBiweight(RobustNorm):
         )
 
     def with_xp(self, xp):
+        """Return a copy of this norm bound to a different array namespace (np or jnp)."""
         return AsymmetricTukeyBiweight(c_pos=self.c_pos, c_neg=self.c_neg, xp=xp)
 
 
@@ -251,6 +264,7 @@ class OneSidedTukeyBiweight(AsymmetricTukeyBiweight):
     """
 
     def __init__(self, c: float = 4.685, xp=np):
+        """Initialize as AsymmetricTukeyBiweight with c_neg=inf (no down-weighting below F0)."""
         super().__init__(c_pos=c, c_neg=np.inf, xp=xp)
 
 
@@ -267,9 +281,11 @@ class TukeyBiweight(AsymmetricTukeyBiweight):
     """
 
     def __init__(self, c: float = 4.685, xp=np):
+        """Initialize as AsymmetricTukeyBiweight with c_pos == c_neg == c."""
         super().__init__(c_pos=c, c_neg=c, xp=xp)
 
     def rho(self, z):
+        """Symmetric Tukey rho — single c, no sign branching."""
         z = self.xp.asarray(z)
         return self._rho_half(z, self.c_pos, self.factor_pos)
 
@@ -428,9 +444,11 @@ def nonlinear_fit(  # noqa: C901
         w_ = jnp.asarray(weights, dtype=dtype) if weights is not None else None
 
         def _make_obj(loss_and_grad_fn):
+            """Wrap a JAX value-and-grad function as ``(fun, jac)`` callables for scipy.minimize."""
             cache = {}
 
             def fun(theta):
+                """Return loss as a Python float and stash the grad for the paired jac callable."""
                 val, grad = loss_and_grad_fn(jnp.asarray(theta, dtype=dtype))
                 cache["g"] = np.array(grad)
                 return float(val)
@@ -438,6 +456,7 @@ def nonlinear_fit(  # noqa: C901
             return fun, lambda theta: cache["g"]
 
         def _ols_loss(theta):
+            """OLS loss for the JAX backend; honors per-sample weights when provided."""
             r = y_ - model(theta, t_)
             return jnp.sum(w_ * r**2) if w_ is not None else jnp.sum(r**2)
 
@@ -446,6 +465,7 @@ def nonlinear_fit(  # noqa: C901
         if M is not None:
 
             def _jax_robust_loss(theta, sigma):
+                """Robust IRLS loss for the JAX backend at a fixed sigma."""
                 return jnp.sum(M.rho((y_ - model(theta, t_)) / sigma))
 
             robust_val_grad = jax.jit(jax.value_and_grad(_jax_robust_loss))
@@ -458,9 +478,15 @@ def nonlinear_fit(  # noqa: C901
     # objective factories
     # ----------------------------
     def make_objective_numpy(sigma=None):
+        """Build a scipy.minimize objective for the numpy backend.
+
+        Returns the OLS objective when ``sigma`` is None, the robust IRLS
+        objective at the given ``sigma`` otherwise.
+        """
         if sigma is None:
 
             def obj(theta):
+                """OLS objective; returns ``(loss, grad)`` if the model provides a Jacobian."""
                 if has_return_jac:
                     y_pred, J = model(theta, t_, return_jac=True)
                     r = y_ - y_pred
@@ -473,6 +499,7 @@ def nonlinear_fit(  # noqa: C901
         else:
 
             def obj(theta):
+                """Robust IRLS objective at fixed sigma; emits a Jacobian if the model has one."""
                 if has_return_jac:
                     y_pred, J = model(theta, t_, return_jac=True)
                     r = y_ - y_pred
@@ -485,6 +512,7 @@ def nonlinear_fit(  # noqa: C901
         return obj
 
     def make_objective_jax(sigma=None):
+        """Build a scipy.minimize ``(fun, jac)`` pair for the JAX backend at the given sigma."""
         if sigma is None:
             return _make_obj(ols_val_grad)
         else:
@@ -513,6 +541,13 @@ def nonlinear_fit(  # noqa: C901
     _norm = jnp.linalg.norm if use_jax else np.linalg.norm
 
     def _run_irls(x_start, sigma_fixed_val, bounds_ov=None):
+        """Run an OLS pre-pass followed by the IRLS loop.
+
+        Starts from ``x_start`` and uses ``bounds_ov`` when provided (round 3),
+        otherwise the outer ``bounds``.  Returns the final fitted curve and the
+        scipy OptimizeResult augmented with ``irls_nit``, ``sigma``, and
+        ``weights``.
+        """
         _bnd = bounds_ov if bounds_ov is not None else bounds
         x_cur = (jnp.asarray(x_start, dtype=dtype) if use_jax
                  else np.asarray(x_start, dtype=float).copy())
@@ -613,6 +648,7 @@ def nonlinear_fit(  # noqa: C901
     fixed_B = not bool(np.any(fitted_B < 0))
 
     def _pick_loss(fitted, res_):
+        """Score a fit: sum-of-robust-losses if sigma is known, else sum-of-squares."""
         if M is not None and hasattr(res_, "sigma") and float(res_.sigma) > 0:
             M_np = M.with_xp(np) if use_jax else M
             return float(np.sum(
@@ -1022,6 +1058,7 @@ def fit_baseline(
 #  Plotting Functions
 # -----------------------------
 def plot_dff(F, F0, F0trend, t=None, zoom_duration=60.0, roi_id=None):  # noqa: C901
+    """Plot raw F alongside the fitted F0 / trend and the resulting dF/F, with a zoomed inset."""
     import matplotlib.pyplot as plt
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
     if t is None:

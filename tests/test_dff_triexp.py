@@ -25,6 +25,7 @@ RNG = np.random.default_rng(42)
 
 
 def _flat_F(N=2, T=1200, baseline=100.0, noise_sd=1.0):
+    """Return an (N, T) Gaussian-noise trace centered on ``baseline``."""
     return RNG.normal(baseline, noise_sd, size=(N, T))
 
 
@@ -51,13 +52,17 @@ def _bleach_F(T=1200, fs=1.0, skip=5.0, noise_sd=2.0):
 # ---------------------------------------------------------------------------
 
 class TestTsLengthValidation:
+    """Verify set_dff_config rejects ts arrays with the wrong length."""
+
     def test_ts_wrong_length_raises(self):
+        """A ts shorter than F's time axis must raise ValueError."""
         F = _flat_F(N=2, T=300)
         ts_wrong = np.arange(200) / 10.0  # length 200, not 300
         with pytest.raises(ValueError, match="ts length"):
             set_dff_config(F, ts=ts_wrong)
 
     def test_ts_correct_length_ok(self):
+        """A ts matching F's time axis must not raise."""
         F = _flat_F(N=2, T=300)
         ts_ok = np.arange(300) / 10.0
         set_dff_config(F, ts=ts_ok)  # must not raise
@@ -68,7 +73,10 @@ class TestTsLengthValidation:
 # ---------------------------------------------------------------------------
 
 class TestTRelStartsAtSkip:
+    """Verify t_rel begins at skip_initial_s (regression for a past bug)."""
+
     def test_with_ts(self):
+        """When ts is provided, n_skip and t_rel[0] follow searchsorted."""
         T, fs, skip = 600, 10.0, 5.0
         ts = np.arange(T) / fs
         F = _flat_F(N=1, T=T)
@@ -79,6 +87,7 @@ class TestTRelStartsAtSkip:
         assert len(config.t_rel) == T - config.n_skip
 
     def test_without_ts(self):
+        """When ts is None, n_skip = int(skip*fs) and t_rel[0] ≈ skip."""
         T, fs, skip = 600, 10.0, 5.0
         F = _flat_F(N=1, T=T)
         config = set_dff_config(F, fs=fs, skip_initial_s=skip)
@@ -104,7 +113,10 @@ class TestTRelStartsAtSkip:
 # ---------------------------------------------------------------------------
 
 class TestParamsJsonSerializable:
+    """Verify config.params is a JSON-loggable reproducibility snapshot."""
+
     def test_default_params(self):
+        """Default-config params dict round-trips through json.dumps/loads."""
         F = _flat_F()
         config = set_dff_config(F, fs=10.0)
         serialised = json.dumps(config.params)  # must not raise
@@ -114,6 +126,7 @@ class TestParamsJsonSerializable:
         assert isinstance(roundtrip["tukey_param_combos"], list)
 
     def test_custom_combos_serializable(self):
+        """Custom tukey_param_combos round-trips as nested lists."""
         F = _flat_F()
         config = set_dff_config(F, fs=10.0, tukey_param_combos=((2, 3), (3, 5)))
         roundtrip = json.loads(json.dumps(config.params))
@@ -125,22 +138,29 @@ class TestParamsJsonSerializable:
 # ---------------------------------------------------------------------------
 
 class TestMinFracValidation:
+    """Verify set_dff_config validates and warns on min_frac_below_f0."""
+
     def _make_F(self):
+        """Build a small flat fluorescence array for these tests."""
         return _flat_F(N=1, T=300)
 
     def test_negative_raises(self):
+        """Negative min_frac_below_f0 must raise ValueError."""
         with pytest.raises(ValueError, match="min_frac_below_f0"):
             set_dff_config(self._make_F(), fs=10.0, min_frac_below_f0=-0.1)
 
     def test_one_raises(self):
+        """min_frac_below_f0 == 1.0 must raise (range is [0, 1))."""
         with pytest.raises(ValueError, match="min_frac_below_f0"):
             set_dff_config(self._make_F(), fs=10.0, min_frac_below_f0=1.0)
 
     def test_above_one_raises(self):
+        """min_frac_below_f0 > 1 must raise."""
         with pytest.raises(ValueError, match="min_frac_below_f0"):
             set_dff_config(self._make_F(), fs=10.0, min_frac_below_f0=1.5)
 
     def test_zero_warns(self):
+        """min_frac_below_f0 == 0 emits a UserWarning about the 0.001 floor."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             set_dff_config(self._make_F(), fs=10.0, min_frac_below_f0=0.0)
@@ -149,6 +169,7 @@ class TestMinFracValidation:
         assert "0.001" in str(user_warns[0].message)
 
     def test_below_0001_warns(self):
+        """min_frac_below_f0 below 0.001 emits a UserWarning."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             set_dff_config(self._make_F(), fs=10.0, min_frac_below_f0=0.0005)
@@ -156,6 +177,7 @@ class TestMinFracValidation:
         assert len(user_warns) == 1
 
     def test_above_half_warns(self):
+        """min_frac_below_f0 above 0.5 emits a UserWarning about the upper bound."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             set_dff_config(self._make_F(), fs=10.0, min_frac_below_f0=0.6)
@@ -164,6 +186,7 @@ class TestMinFracValidation:
         assert "0.5" in str(user_warns[0].message)
 
     def test_default_no_warning(self):
+        """The default min_frac_below_f0 (0.05) emits no UserWarning."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             set_dff_config(self._make_F(), fs=10.0, min_frac_below_f0=0.05)
@@ -176,7 +199,10 @@ class TestMinFracValidation:
 # ---------------------------------------------------------------------------
 
 class TestIsLowF0:
+    """Verify _is_low_f0 fires when F0 sits below the data, not above."""
+
     def _t_rel(self, T=600, fs=10.0, skip=5.0):
+        """Build a t_rel vector that begins at skip_initial_s (in seconds)."""
         return (np.arange(T) + int(skip * fs)) / fs
 
     def test_true_when_f0_below_all_data(self):
@@ -210,7 +236,10 @@ class TestIsLowF0:
 # ---------------------------------------------------------------------------
 
 class TestDffFlat:
+    """Smoke tests for dff() on flat-baseline input (shapes, dtypes, logs)."""
+
     def test_output_shapes_and_dtypes(self):
+        """dff() returns the expected shapes and dtypes for an (N, T) input."""
         N, T = 3, 600
         F = _flat_F(N=N, T=T, baseline=100.0, noise_sd=1.0)
         config = set_dff_config(F, fs=10.0)
@@ -228,6 +257,7 @@ class TestDffFlat:
         assert params.dtype == np.float64
 
     def test_dff_near_zero_for_flat_signal(self):
+        """Median dFF should be near zero when F has no real bleach trend."""
         N, T = 2, 600
         F = _flat_F(N=N, T=T, baseline=200.0, noise_sd=0.5)
         config = set_dff_config(F, fs=10.0)
@@ -237,6 +267,7 @@ class TestDffFlat:
             assert abs(float(np.median(dff_out[i]))) < 0.05
 
     def test_logs_have_expected_keys(self):
+        """Per-ROI log dicts contain the documented pass-diagnostic keys."""
         F = _flat_F(N=1, T=600)
         config = set_dff_config(F, fs=10.0)
         _, _, _, _, logs = dff(F, config, n_jobs=1)
@@ -292,7 +323,10 @@ class TestDffFlat:
 # ---------------------------------------------------------------------------
 
 class TestDffSyntheticBleach:
+    """End-to-end tests on a synthetic slow-bleach trace with known F0."""
+
     def test_f0_recovery(self):
+        """dff() recovers the ground-truth F0 within 5% RMSE of amplitude."""
         # Low noise so RMSE measures fit quality, not noise floor.
         # b_inf_lb_factor=0.5 and b_slow_max_factor=3.0 are needed here because
         # default bounds are derived from data statistics: b_inf_lb = P1(F) and
@@ -331,7 +365,10 @@ class TestDffSyntheticBleach:
 # ---------------------------------------------------------------------------
 
 class TestDff1D:
+    """Verify dff() dispatches correctly on 1D input."""
+
     def test_1d_input_returns_1d(self):
+        """A 1D F yields 1D outputs and a single log dict (not a list)."""
         F_full, _, ts, _ = _bleach_F(T=600, fs=1.0)
         config = set_dff_config(F_full[np.newaxis, :], fs=1.0, ts=ts)
         dff_out, F0, noise_sd, params, log = dff(F_full, config, n_jobs=1)
@@ -348,7 +385,10 @@ class TestDff1D:
 # ---------------------------------------------------------------------------
 
 class TestBoundaryFitError:
+    """Verify _boundary_fit_error catches Pattern A / B artifacts."""
+
     def _t_rel(self, T=3600, fs=1.0):
+        """Build a 1 Hz t_rel vector starting at 5 s with its median step."""
         t = np.arange(T, dtype=float) + 5.0  # starts at 5s
         return t, float(np.median(np.diff(t)))
 
