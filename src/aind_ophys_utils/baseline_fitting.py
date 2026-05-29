@@ -654,24 +654,14 @@ def nonlinear_fit(  # noqa: C901
             return float(np.sum(
                 M_np.rho((np.asarray(y_, dtype=float) - fitted) / float(res_.sigma))
             ))
-        # Unreachable when round 3 is entered: _run_irls always sets res.sigma
-        # > 0 unless residuals are exactly zero (noiseless fit), which is
-        # numerically impossible after IRLS on a noisy bleach trace.
         return float(np.sum((np.asarray(y_, dtype=float) - fitted) ** 2))  # pragma: no cover
 
     if fixed_A and fixed_B:
-        # Note: covering both the "A wins" and "B wins" arms of this comparison
-        # requires engineering specific local-minimum geometries; only the
-        # "A wins" arm is exercised by the test suite.
         if _pick_loss(fitted_B, res_B) < _pick_loss(fitted_A, res_A):
             best_fitted, best_res, x0_used = fitted_B, res_B, "B"  # pragma: no cover
         else:
             best_fitted, best_res, x0_used = fitted_A, res_A, "A"
     elif fixed_A:
-        # Only-A-succeeds and only-B-succeeds require pass-2 to leave a
-        # negative-fitted trace that one b_bright-clipped restart fixes but
-        # the other doesn't — a degenerate scenario not produced by our
-        # synthetic traces.
         best_fitted, best_res, x0_used = fitted_A, res_A, "A"  # pragma: no cover
     elif fixed_B:
         best_fitted, best_res, x0_used = fitted_B, res_B, "B"  # pragma: no cover
@@ -764,9 +754,6 @@ def robust_lowess(
         else:
             sigma = np.median(np.abs(resid)) * 1.4826
             if sigma == 0:
-                # Unreachable in practice: LOWESS smoothing leaves O(1e-15)
-                # floating-point residuals on perfectly flat input, so MAD is
-                # tiny but never exactly zero.
                 sigma = np.std(resid)  # pragma: no cover
 
         w_new = M.weights(resid / sigma)
