@@ -1,7 +1,7 @@
 """Robust baseline fitting utilities.
 
 Provides M-estimator norms (Tukey biweight variants) and the
-``nonlinear_fit`` IRLS routine used to fit triexponential bleach baselines.
+``nonlinear_fit`` IRLS routine used to fit parametric bleach baselines.
 Also exposes a robust LOWESS smoother and a plotting helper.
 """
 import inspect
@@ -23,28 +23,43 @@ jax.config.update("jax_enable_x64", True)
 # -----------------------------
 #  Baselines with Jacobians or JAX tracing for autodiff
 # -----------------------------
-def single_exp(
+def sum_of_exps(
     params: np.ndarray,
     t: np.ndarray,
     xp=np,
     return_jac: bool = False,
 ) -> np.ndarray | jax.Array | tuple[np.ndarray, np.ndarray]:
     """
-    Baseline with exponential decay (bleaching).
+    Baseline as a sum of exponentials, optionally with a constant offset.
 
     Parameters
     ----------
     params : np.ndarray
-        Parameter vector [b_inf, b, tau].
-        ``b_inf`` — asymptotic (t→∞) baseline level.
-        ``b``   — bleaching amplitude (same units as signal).
-        ``tau`` — bleaching time constant.
+        Parameter vector.  Elements are interleaved amplitude/time-constant
+        pairs ``(b_1, tau_1, b_2, tau_2, ...)``.  When the total number of
+        parameters is **odd**, the first element is a constant offset
+        ``b_inf``; the remaining elements are the pairs:
+
+            y = b_inf + b_1*exp(-t/tau_1) + b_2*exp(-t/tau_2) + ...
+
+        When the number of parameters is **even** there is no constant term:
+
+            y = b_1*exp(-t/tau_1) + b_2*exp(-t/tau_2) + ...
+
+        Negative amplitudes are permitted and represent suppression (e.g.
+        a brightening artefact correction).
+
+        Typical special cases by parameter count:
+
+        - 3 params ``[b_inf, b, tau]``                         → single exp
+        - 5 params ``[b_inf, b_1, tau_1, b_2, tau_2]``         → double exp
+        - 9 params ``[b_inf, b_1, tau_1, ..., b_4, tau_4]``    → quad exp
     t : np.ndarray
         Timestamps.
     xp : module, optional
-        Array namespace to use. Pass ``jnp`` for JAX tracing, default ``np``.
+        Array namespace to use.  Pass ``jnp`` for JAX tracing; default ``np``.
     return_jac : bool, optional
-        If True, return Jacobian alongside the model prediction.
+        If True, return the analytic Jacobian alongside the model prediction.
         Ignored when ``xp is jnp``; use autodiff instead.
 
     Returns
@@ -52,127 +67,33 @@ def single_exp(
     y : np.ndarray
         Model prediction.
     J : np.ndarray, optional
-        Jacobian with respect to parameters (returned if return_jac=True).
+        Jacobian with respect to ``params``, shape ``(len(t), len(params))``.
+        Returned only when ``return_jac=True``.
     """
-    b_inf, b, tau = params
-    E = xp.exp(-t / tau)
-    y = b_inf + b * E
+    n = len(params)
+    has_const = n % 2 == 1
+    pair_start = 1 if has_const else 0
+    n_pairs = (n - pair_start) // 2
+
+    y = params[0] if has_const else 0.0
+
+    if return_jac:
+        J = np.empty((t.size, n))
+        if has_const:
+            J[:, 0] = 1.0
+
+    for i in range(n_pairs):
+        b_i = params[pair_start + 2 * i]
+        tau_i = params[pair_start + 2 * i + 1]
+        E_i = xp.exp(-t / tau_i)
+        y = y + b_i * E_i
+        if return_jac:
+            j = pair_start + 2 * i
+            J[:, j] = E_i
+            J[:, j + 1] = b_i / tau_i**2 * (t * E_i)
+
     if not return_jac:
         return y
-
-    J = np.empty((t.size, 3))
-    J[:, 0] = 1.0  # d/d b_inf
-    J[:, 1] = E  # d/d b
-    J[:, 2] = b / tau**2 * (E * t)  # d/d tau
-    return y, J
-
-
-def double_exp(
-    params: np.ndarray,
-    t: np.ndarray,
-    xp=np,
-    return_jac: bool = False,
-) -> np.ndarray | jax.Array | tuple[np.ndarray, np.ndarray]:
-    """
-    Baseline with biphasic exponential decay (bleaching).
-
-    Parameters
-    ----------
-    params : np.ndarray
-        Parameter vector: [b_inf, b_slow, b_fast, t_slow, t_fast].
-        ``b_inf``  — asymptotic (t→∞) baseline level.
-        ``b_slow``, ``b_fast`` — bleaching amplitudes (same units as signal).
-        ``t_slow``, ``t_fast`` — bleaching time constants.
-    t : np.ndarray
-        Timestamps.
-    xp : module, optional
-        Array namespace to use. Pass ``jnp`` for JAX tracing, default ``np``.
-    return_jac : bool, optional
-        If True, return Jacobian alongside the model prediction.
-        Ignored when ``xp is jnp``; use autodiff instead.
-
-    Returns
-    -------
-    y : np.ndarray
-        Model prediction.
-    J : np.ndarray, optional
-        Jacobian with respect to parameters (returned if return_jac=True).
-    """
-    b_inf, b_slow, b_fast, t_slow, t_fast = params
-    E_slow = xp.exp(-t / t_slow)
-    E_fast = xp.exp(-t / t_fast)
-    y = b_inf + b_slow * E_slow + b_fast * E_fast
-    if not return_jac:
-        return y
-
-    J = np.empty((t.size, 5))
-    J[:, 0] = 1.0  # d/d b_inf
-    J[:, 1] = E_slow  # d/d b_slow
-    J[:, 2] = E_fast  # d/d b_fast
-    J[:, 3] = b_slow / t_slow**2 * (E_slow * t)  # d/d t_slow
-    J[:, 4] = b_fast / t_fast**2 * (E_fast * t)  # d/d t_fast
-    return y, J
-
-
-def bright(
-    params: np.ndarray,
-    t: np.ndarray,
-    xp=np,
-    return_jac: bool = False,
-) -> np.ndarray | jax.Array | tuple[np.ndarray, np.ndarray]:
-    """
-    Bright baseline with triphasic decay and saturating brightening.
-
-    Parameters
-    ----------
-    params : np.ndarray
-        Parameter vector: [b_inf, b_slow, b_fast, b_rapid, b_bright,
-                           t_slow, t_fast, t_rapid, t_bright].
-        ``b_inf``            — asymptotic (t→∞) baseline level.
-        ``b_slow``, ``b_fast``, ``b_rapid`` — bleaching amplitudes (> 0).
-        ``b_bright``         — brightening amplitude (> 0); signal starts
-                               suppressed by ``b_bright`` and recovers.
-        ``t_slow``, ``t_fast``, ``t_rapid``, ``t_bright`` — time constants.
-    t : np.ndarray
-        Timestamps.
-    xp : module, optional
-        Array namespace to use. Pass ``jnp`` for JAX tracing, default ``np``.
-    return_jac : bool, optional
-        If True, return Jacobian alongside the model prediction.
-        Ignored when ``xp is jnp``; use autodiff instead.
-
-    Returns
-    -------
-    y : np.ndarray
-        Model prediction.
-    J : np.ndarray, optional
-        Jacobian with respect to parameters (returned if return_jac=True).
-    """
-    b_inf, b_slow, b_fast, b_rapid, b_bright, t_slow, t_fast, t_rapid, t_bright = params
-    E_slow = xp.exp(-t / t_slow)
-    E_fast = xp.exp(-t / t_fast)
-    E_rapid = xp.exp(-t / t_rapid)
-    E_bright = xp.exp(-t / t_bright)
-    y = (
-        b_inf
-        + b_slow * E_slow
-        + b_fast * E_fast
-        + b_rapid * E_rapid
-        - b_bright * E_bright
-    )
-    if not return_jac:
-        return y
-
-    J = np.empty((t.size, 9))
-    J[:, 0] = 1.0  # d/d b_inf
-    J[:, 1] = E_slow  # d/d b_slow
-    J[:, 2] = E_fast  # d/d b_fast
-    J[:, 3] = E_rapid  # d/d b_rapid
-    J[:, 4] = -E_bright  # d/d b_bright
-    J[:, 5] = b_slow / t_slow**2 * (E_slow * t)  # d/d t_slow
-    J[:, 6] = b_fast / t_fast**2 * (E_fast * t)  # d/d t_fast
-    J[:, 7] = b_rapid / t_rapid**2 * (E_rapid * t)  # d/d t_rapid
-    J[:, 8] = -b_bright / t_bright**2 * (E_bright * t)  # d/d t_bright
     return y, J
 
 
@@ -293,7 +214,7 @@ class TukeyBiweight(AsymmetricTukeyBiweight):
 # -----------------------------
 #  Fitting Functions
 # -----------------------------
-def nonlinear_fit(  # noqa: C901
+def nonlinear_fit(
     # --- data / model ---
     trace: np.ndarray,
     t: np.ndarray,
@@ -307,8 +228,6 @@ def nonlinear_fit(  # noqa: C901
     maxiter: int = 5,
     tol: float = 1e-3,
     sigma_relax_threshold: float = 0.05,
-    # --- round-3 b_bright constraint ---
-    use_bright_constraint: bool = True,
     # --- optimizer ---
     optimizer: str = "L-BFGS-B",
     optimizer_options: dict | None = None,
@@ -318,7 +237,7 @@ def nonlinear_fit(  # noqa: C901
 ) -> tuple[np.ndarray, OptimizeResult]:
     """
     Fit a nonlinear model to a 1-D trace using OLS or robust IRLS, with up to
-    three rounds of degeneracy recovery.
+    two rounds of degeneracy recovery.
 
     Round 1 — standard IRLS from ``x0``.
       Degeneracy check: proportion of negative residuals (``mean(trace < fitted)``)
@@ -328,18 +247,6 @@ def nonlinear_fit(  # noqa: C901
     Round 2 — sigma relaxation (requires ``fixed_sigma`` and ``M``).
       Re-runs IRLS from ``x0`` with a relaxed sigma so the M-estimator
       downweights fewer points, giving the trend room to drop.
-      Degeneracy check: any sample of the fitted trend is negative (only
-      meaningful for models where the baseline must be positive).
-
-    Round 3 — b_bright upper-bound constraint + dual starting points
-      (requires ``use_bright_constraint=True``).
-      Assumes the biexp_bright_v1 parameter layout: b_bright is index 3,
-      and the upper bound is b_inf + b_slow + b_fast (indices 0+1+2).
-      Both x0_A (original ``x0``) and x0_B (round-2 params with b_bright
-      clipped to the upper bound) are tried with the relaxed sigma and the
-      tighter bounds.  The best result is selected by: fixes neg-baseline >
-      doesn't fix; if both fix, lower robust loss wins; if neither fixes,
-      the round-2 result is returned unchanged.
 
     Supports two backends:
 
@@ -356,12 +263,12 @@ def nonlinear_fit(  # noqa: C901
     t : np.ndarray
         Time vector passed to ``model``, shape ``(N,)``.
     model : callable
-        ``model(params, t) -> np.ndarray | jax.Array``.
+        Any parametric function ``model(params, t) -> np.ndarray | jax.Array``.
         For the numpy backend, may optionally support
         ``model(params, t, return_jac=True) -> (np.ndarray, np.ndarray)``,
         returning ``(prediction, J)`` where ``J`` has shape ``(N, n_params)``.
-        For the JAX backend, it's wrapped automatically if the model has an
-        xp parameter.
+        For the JAX backend, the model is differentiated automatically; if it
+        accepts an ``xp`` keyword argument it is wrapped with ``xp=jnp``.
     x0 : np.ndarray
         Initial parameter vector, shape ``(n_params,)``.
     bounds : sequence of (min, max) pairs or None
@@ -379,8 +286,8 @@ def nonlinear_fit(  # noqa: C901
         pre-pass from a prior fit's ``res.weights``. ``None`` → uniform weights.
     fixed_sigma : float or None
         Fixed robust scale estimate. When provided, replaces the per-iteration
-        MAD estimate in the IRLS loop. Required for rounds 2 and 3 (sigma
-        relaxation cannot be computed without a reference scale).
+        MAD estimate in the IRLS loop. Required for round 2 (sigma relaxation
+        cannot be computed without a reference scale).
     maxiter : int
         Maximum number of IRLS outer iterations. Ignored when ``M=None``.
     tol : float
@@ -390,9 +297,6 @@ def nonlinear_fit(  # noqa: C901
         Proportion-below threshold for the round-1 degeneracy check.
         If ``mean(trace < fitted) < sigma_relax_threshold`` after round 1,
         round 2 is triggered. Default ``0.05``.
-    use_bright_constraint : bool
-        Enable round 3. Assumes biexp_bright_v1 layout: b_bright at index 3,
-        upper bound = b_inf + b_slow + b_fast (indices 0+1+2). Default True.
     optimizer : str
         Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
     optimizer_options : dict or None
@@ -420,11 +324,7 @@ def nonlinear_fit(  # noqa: C901
         ``res.weights`` (np.ndarray, shape ``(N,)``) — M-estimator weights
         (only when ``M`` is not ``None``).
 
-        ``res.round`` (int) — which round produced the final result (1, 2, or 3).
-
-        ``res.x0_used`` (str or None) — for round 3: ``'A'`` (original x0),
-        ``'B'`` (round-2 params), or ``None`` (round 3 did not fix neg-baseline,
-        round-2 result kept). Not set for rounds 1 and 2.
+        ``res.round`` (int) — which round produced the final result (1 or 2).
     """
     if optimizer_options is None:
         optimizer_options = {"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}
@@ -522,7 +422,7 @@ def nonlinear_fit(  # noqa: C901
     provides_grad = use_jax or has_return_jac
 
     # ----------------------------
-    # Pre-compute relaxed sigma (needed for rounds 2 & 3).
+    # Pre-compute relaxed sigma (needed for round 2).
     # Requires fixed_sigma and a tight M-estimator (z_half root in [0, 2]).
     # ----------------------------
     _relax_sigma = None
@@ -536,26 +436,22 @@ def nonlinear_fit(  # noqa: C901
 
     # ----------------------------
     # Inner helper: OLS pre-pass + full IRLS from a given starting point.
-    # bounds_ov overrides the outer bounds when provided (used in round 3).
     # ----------------------------
     _norm = jnp.linalg.norm if use_jax else np.linalg.norm
 
-    def _run_irls(x_start, sigma_fixed_val, bounds_ov=None):
+    def _run_irls(x_start, sigma_fixed_val):
         """Run an OLS pre-pass followed by the IRLS loop.
 
-        Starts from ``x_start`` and uses ``bounds_ov`` when provided (round 3),
-        otherwise the outer ``bounds``.  Returns the final fitted curve and the
-        scipy OptimizeResult augmented with ``irls_nit``, ``sigma``, and
-        ``weights``.
+        Returns the final fitted curve and the scipy OptimizeResult augmented
+        with ``irls_nit``, ``sigma``, and ``weights``.
         """
-        _bnd = bounds_ov if bounds_ov is not None else bounds
         x_cur = (jnp.asarray(x_start, dtype=dtype) if use_jax
                  else np.asarray(x_start, dtype=float).copy())
 
         # OLS pre-pass
         fun_or_pair = make_objective()
         _fun, _jac = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
-        _res = minimize(_fun, x_cur, bounds=_bnd, method=optimizer,
+        _res = minimize(_fun, x_cur, bounds=bounds, method=optimizer,
                         jac=_jac, options=optimizer_options)
         x_cur = jnp.asarray(_res.x, dtype=dtype) if use_jax else _res.x
 
@@ -577,7 +473,7 @@ def nonlinear_fit(  # noqa: C901
 
             fun_or_pair = make_objective(_sigma)
             _fun, _jac = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
-            _res = minimize(_fun, x_cur, bounds=_bnd, method=optimizer,
+            _res = minimize(_fun, x_cur, bounds=bounds, method=optimizer,
                             jac=_jac, options=optimizer_options)
 
             x_new = jnp.asarray(_res.x, dtype=dtype) if use_jax else _res.x
@@ -613,64 +509,8 @@ def nonlinear_fit(  # noqa: C901
     # Round 2 — sigma relaxation
     # ----------------------------
     fitted_2, res_2 = _run_irls(x_start, _relax_sigma)
-
-    has_neg = bool(np.any(fitted_2 < 0))
-    can_r3 = has_neg and use_bright_constraint
-
-    if not can_r3:
-        res_2.round = 2
-        return fitted_2, res_2
-
-    # ----------------------------
-    # Round 3 — b_bright constraint + dual x0
-    # biexp_bright_v1 layout: b_bright=index 3, ub = indices 0+1+2
-    # ----------------------------
-    _B_BRIGHT_IDX = 3
-    _B_BRIGHT_ADDITIVE = (0, 1, 2)
-
-    x_2_np = np.asarray(res_2.x, dtype=float)
-    b_bright_ub = max(0.0, float(sum(x_2_np[i] for i in _B_BRIGHT_ADDITIVE)))
-
-    _bnd_list = list(bounds) if bounds else [(None, None)] * len(np.asarray(x0))
-    lo_bb = _bnd_list[_B_BRIGHT_IDX][0]
-    _bnd_list[_B_BRIGHT_IDX] = (lo_bb if lo_bb is not None else 0.0,
-                                b_bright_ub if b_bright_ub > 0 else None)
-    con_bounds = tuple(_bnd_list)
-
-    x0_B_np = x_2_np.copy()
-    x0_B_np[_B_BRIGHT_IDX] = min(float(x_2_np[_B_BRIGHT_IDX]), b_bright_ub)
-    x0_B = jnp.asarray(x0_B_np, dtype=dtype) if use_jax else x0_B_np
-
-    fitted_A, res_A = _run_irls(x_start, _relax_sigma, con_bounds)
-    fitted_B, res_B = _run_irls(x0_B,    _relax_sigma, con_bounds)
-
-    fixed_A = not bool(np.any(fitted_A < 0))
-    fixed_B = not bool(np.any(fitted_B < 0))
-
-    def _pick_loss(fitted, res_):
-        """Score a fit: sum-of-robust-losses if sigma is known, else sum-of-squares."""
-        if M is not None and hasattr(res_, "sigma") and float(res_.sigma) > 0:
-            M_np = M.with_xp(np) if use_jax else M
-            return float(np.sum(
-                M_np.rho((np.asarray(y_, dtype=float) - fitted) / float(res_.sigma))
-            ))
-        return float(np.sum((np.asarray(y_, dtype=float) - fitted) ** 2))  # pragma: no cover
-
-    if fixed_A and fixed_B:
-        if _pick_loss(fitted_B, res_B) < _pick_loss(fitted_A, res_A):
-            best_fitted, best_res, x0_used = fitted_B, res_B, "B"  # pragma: no cover
-        else:
-            best_fitted, best_res, x0_used = fitted_A, res_A, "A"
-    elif fixed_A:
-        best_fitted, best_res, x0_used = fitted_A, res_A, "A"  # pragma: no cover
-    elif fixed_B:
-        best_fitted, best_res, x0_used = fitted_B, res_B, "B"  # pragma: no cover
-    else:
-        best_fitted, best_res, x0_used = fitted_2, res_2, None
-
-    best_res.round = 3
-    best_res.x0_used = x0_used
-    return best_fitted, best_res
+    res_2.round = 2
+    return fitted_2, res_2
 
 
 def robust_lowess(
@@ -910,8 +750,6 @@ def fit_baseline(
     maxiter: int = 5,
     tol: float = 1e-3,
     sigma_relax_threshold: float = 0.05,
-    # --- round-3 b_bright constraint ---
-    use_bright_constraint: bool = True,
     # --- smoother ---
     mode: Literal["ratio", "subtract"] = "ratio",
     frac: float = 0.1,
@@ -939,7 +777,7 @@ def fit_baseline(
     t : np.ndarray
         Timestamps, shape ``(N,)``. Must be sorted in ascending order.
     model : callable
-        Parametric trend model, e.g. :func:`single_exp` or :func:`double_exp`.
+        Parametric trend model, e.g. :func:`sum_of_exps`.
         See :func:`nonlinear_fit` for calling conventions.
     x0 : np.ndarray
         Initial parameter vector for ``model``, shape ``(n_params,)``.
@@ -1030,7 +868,6 @@ def fit_baseline(
         maxiter,
         tol,
         sigma_relax_threshold=sigma_relax_threshold,
-        use_bright_constraint=use_bright_constraint,
         optimizer=optimizer,
         optimizer_options=optimizer_options,
         backend=backend,

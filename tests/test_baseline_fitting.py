@@ -14,90 +14,100 @@ from aind_ophys_utils.baseline_fitting import (  # noqa: E402
     AsymmetricTukeyBiweight,
     OneSidedTukeyBiweight,
     TukeyBiweight,
-    bright,
-    double_exp,
     fit_baseline,
     fit_baseline_fluctuations,
     nonlinear_fit,
     plot_dff,
     robust_lowess,
-    single_exp,
+    sum_of_exps,
 )
-from aind_ophys_utils.dff_triexp import _biexp_bright  # noqa: E402
 
 
 RNG = np.random.default_rng(42)
 
 
 # ---------------------------------------------------------------------------
-# 1. Model functions: single_exp, double_exp, bright
+# 1. sum_of_exps — single_exp, double_exp, and bright cases
 # ---------------------------------------------------------------------------
 
-class TestSingleExp:
-    """Exercise single_exp value and Jacobian paths."""
+class TestSumOfExps:
+    """Exercise sum_of_exps for all three classic cases."""
 
-    def test_value_only(self):
-        """Default call returns predictions matching the analytic formula."""
+    def test_single_exp_value(self):
+        """3 params (odd) → b_inf + b*exp(-t/tau)."""
         t = np.linspace(0, 100, 200)
         params = np.array([10.0, 5.0, 50.0])  # b_inf, b, tau
-        y = single_exp(params, t)
+        y = sum_of_exps(params, t)
         expected = 10.0 + 5.0 * np.exp(-t / 50.0)
         assert np.allclose(y, expected)
 
-    def test_returns_jacobian(self):
-        """return_jac=True returns (y, J) of expected shape."""
+    def test_single_exp_jacobian(self):
+        """return_jac=True returns (y, J) of shape (200, 3)."""
         t = np.linspace(0, 100, 200)
         params = np.array([10.0, 5.0, 50.0])
-        y, J = single_exp(params, t, return_jac=True)
+        y, J = sum_of_exps(params, t, return_jac=True)
         assert y.shape == (200,)
         assert J.shape == (200, 3)
         assert np.allclose(J[:, 0], 1.0)
         assert np.allclose(J[:, 1], np.exp(-t / 50.0))
 
-
-class TestDoubleExp:
-    """Exercise double_exp value and Jacobian paths."""
-
-    def test_value_only(self):
-        """Default call returns biphasic decay."""
+    def test_double_exp_value(self):
+        """5 params (odd) → b_inf + b1*exp(-t/tau1) + b2*exp(-t/tau2)."""
         t = np.linspace(0, 100, 200)
-        params = np.array([10.0, 5.0, 3.0, 50.0, 5.0])
-        y = double_exp(params, t)
+        # [b_inf, b1, tau1, b2, tau2]
+        params = np.array([10.0, 5.0, 50.0, 3.0, 5.0])
+        y = sum_of_exps(params, t)
         expected = 10.0 + 5.0 * np.exp(-t / 50.0) + 3.0 * np.exp(-t / 5.0)
         assert np.allclose(y, expected)
 
-    def test_returns_jacobian(self):
-        """return_jac=True returns (y, J) of expected shape."""
+    def test_double_exp_jacobian(self):
+        """return_jac=True returns (y, J) of shape (200, 5)."""
         t = np.linspace(0, 100, 200)
-        params = np.array([10.0, 5.0, 3.0, 50.0, 5.0])
-        y, J = double_exp(params, t, return_jac=True)
+        params = np.array([10.0, 5.0, 50.0, 3.0, 5.0])
+        y, J = sum_of_exps(params, t, return_jac=True)
         assert J.shape == (200, 5)
 
-
-class TestBright:
-    """Exercise the bright model with the bright term active."""
-
-    def test_value_only(self):
-        """Default call returns the triphasic-decay + brightening sum."""
+    def test_quad_exp_value(self):
+        """9 params (odd) → b_inf + 4 exponentials; negative amplitude gives subtraction."""
         t = np.linspace(0, 100, 100)
-        params = np.array([100.0, 10.0, 5.0, 2.0, 20.0, 1800.0, 60.0, 10.0, 50.0])
-        y = bright(params, t)
-        b_inf, b_slow, b_fast, b_rapid, b_bright, t_slow, t_fast, t_rapid, t_bright = params
+        # [b_inf, b_slow, tau_slow, b_fast, tau_fast,
+        #  b_rapid, tau_rapid, b_bright, tau_bright]
+        # b_bright is negative to represent suppression
+        params = np.array([100.0, 10.0, 1800.0, 5.0, 60.0, 2.0, 10.0, -20.0, 50.0])
+        y = sum_of_exps(params, t)
+        b_inf, b1, tau1, b2, tau2, b3, tau3, b4, tau4 = params
         expected = (
             b_inf
-            + b_slow * np.exp(-t / t_slow)
-            + b_fast * np.exp(-t / t_fast)
-            + b_rapid * np.exp(-t / t_rapid)
-            - b_bright * np.exp(-t / t_bright)
+            + b1 * np.exp(-t / tau1)
+            + b2 * np.exp(-t / tau2)
+            + b3 * np.exp(-t / tau3)
+            + b4 * np.exp(-t / tau4)
         )
         assert np.allclose(y, expected)
 
-    def test_returns_jacobian(self):
-        """return_jac=True returns a (T, 9) Jacobian."""
+    def test_quad_exp_jacobian(self):
+        """return_jac=True returns a (100, 9) Jacobian for 9-param model."""
         t = np.linspace(0, 100, 100)
-        params = np.array([100.0, 10.0, 5.0, 2.0, 20.0, 1800.0, 60.0, 10.0, 50.0])
-        y, J = bright(params, t, return_jac=True)
+        params = np.array([100.0, 10.0, 1800.0, 5.0, 60.0, 2.0, 10.0, -20.0, 50.0])
+        y, J = sum_of_exps(params, t, return_jac=True)
         assert J.shape == (100, 9)
+
+    def test_even_params_no_constant(self):
+        """2 params (even) → no b_inf, just b*exp(-t/tau)."""
+        t = np.linspace(0, 100, 50)
+        params = np.array([5.0, 30.0])  # b, tau
+        y = sum_of_exps(params, t)
+        expected = 5.0 * np.exp(-t / 30.0)
+        assert np.allclose(y, expected)
+
+    def test_jax_backend(self):
+        """sum_of_exps traces correctly with xp=jnp."""
+        import jax.numpy as jnp
+        t = np.linspace(0, 100, 50)
+        params = np.array([10.0, 5.0, 50.0])
+        y = sum_of_exps(params, jnp.asarray(t), xp=jnp)
+        expected = 10.0 + 5.0 * np.exp(-t / 50.0)
+        assert np.allclose(np.array(y), expected)
 
 
 # ---------------------------------------------------------------------------
@@ -145,8 +155,8 @@ class TestNorms:
 def _decay_trace(noise_sd=0.5, T=400):
     """Synthesise a single-exp decay trace at uniform 1 Hz sampling."""
     t = np.arange(T, dtype=float)
-    true_params = np.array([5.0, 10.0, 30.0])
-    y = single_exp(true_params, t) + RNG.normal(0, noise_sd, size=T)
+    true_params = np.array([5.0, 10.0, 30.0])  # b_inf, b, tau
+    y = sum_of_exps(true_params, t) + RNG.normal(0, noise_sd, size=T)
     return y, t, true_params
 
 
@@ -157,7 +167,7 @@ class TestNonlinearFitNumpy:
         """numpy backend, OLS path, model supplies a Jacobian."""
         y, t, true = _decay_trace()
         x0 = np.array([1.0, 1.0, 50.0])
-        fitted, res = nonlinear_fit(y, t, single_exp, x0, backend="numpy")
+        fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
         assert fitted.shape == y.shape
         assert np.allclose(res.x, true, atol=2.0)
 
@@ -167,7 +177,7 @@ class TestNonlinearFitNumpy:
         w = np.ones_like(y)
         x0 = np.array([1.0, 1.0, 50.0])
         _, res = nonlinear_fit(
-            y, t, single_exp, x0, backend="numpy", weights=w,
+            y, t, sum_of_exps, x0, backend="numpy", weights=w,
         )
         assert res.success or res.status >= 0
 
@@ -177,7 +187,7 @@ class TestNonlinearFitNumpy:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
         fitted, res = nonlinear_fit(
-            y, t, single_exp, x0, backend="numpy", M=M, fixed_sigma=0.3,
+            y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.3,
         )
         assert fitted.shape == y.shape
         assert np.allclose(res.x, true, atol=2.0)
@@ -197,7 +207,7 @@ class TestNonlinearFitJax:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
         fitted, res = nonlinear_fit(
-            y, t, single_exp, x0,
+            y, t, sum_of_exps, x0,
             backend="jax", M=M, fixed_sigma=0.3, dtype=jnp.float64,
         )
         assert fitted.shape == y.shape
@@ -205,92 +215,37 @@ class TestNonlinearFitJax:
 
 
 # ---------------------------------------------------------------------------
-# 5. nonlinear_fit — round-3 b_bright constraint path
+# 5. nonlinear_fit — round-2 sigma relaxation path
 # ---------------------------------------------------------------------------
 
-class TestNonlinearFitRound3:
-    """Trigger the round-3 b_bright constraint logic in nonlinear_fit."""
+class TestNonlinearFitRound2:
+    """Trigger the round-2 sigma relaxation logic in nonlinear_fit."""
 
-    def test_round_3_runs_on_biexp_bright(self):
-        """biexp_bright trace where pass-1 hits frac_below < threshold and
-        pass-2 fitted dips negative → round 3 b_bright constraint activates.
-
-        Uses ``_biexp_bright`` (the 7-param model round 3 is hard-coded for —
-        b_bright at index 3) and a large b_bright relative to b_inf so the
-        true F0 takes negative values early in the window.
-        """
-        T = 800
-        t = np.arange(T, dtype=float) + 1.0
-        # true F0(t) = 5 - 50*exp(-t/30) → starts very negative, levels off at 5.
-        true = np.array([5.0, 0.0, 0.0, 50.0, 1800.0, 60.0, 30.0])
-        y = _biexp_bright(true, t) + RNG.normal(0, 0.3, size=T)
-        x0 = np.array([5.0, 0.0, 0.0, 0.0, 1800.0, 60.0, 100.0])
-        bounds = [
-            (-1e3, 1e3),  # b_inf
-            (0.0, 1e3),   # b_slow
-            (0.0, 1e3),   # b_fast
-            (0.0, 1e3),   # b_bright
-            (1.0, 1e5), (1.0, 1e5), (1.0, 1e5),  # taus
-        ]
+    def test_round_2_triggered_by_high_threshold(self):
+        """sigma_relax_threshold=0.99 → almost always triggers round 2."""
+        y, t, _ = _decay_trace(noise_sd=0.3)
+        x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
         fitted, res = nonlinear_fit(
-            y, t, _biexp_bright, x0, bounds=bounds,
+            y, t, sum_of_exps, x0,
             backend="jax", M=M, fixed_sigma=0.3,
-            sigma_relax_threshold=0.99,  # high → pass 1 → pass 2 always
-            use_bright_constraint=True,
+            sigma_relax_threshold=0.99,  # forces round 2
         )
         assert fitted.shape == y.shape
-        # Pass 2 likely produces some fitted < 0 here (b_bright fully active in
-        # the relaxed fit), so round 3 should activate.
-        assert res.round == 3, f"expected round 3, got round {res.round}"
+        assert res.round in (1, 2)
 
-    def test_round_3_b_wins_when_xstart_diverges(self):
-        """Round 3 with a deliberately poor x_start so x0_B (pass-2 params) gives
-        a better fit, hitting the ``loss_B < loss_A`` "B wins" branch (line 661).
-        """
-        T = 800
-        t = np.arange(T, dtype=float) + 1.0
-        true = np.array([5.0, 0.0, 0.0, 50.0, 1800.0, 60.0, 30.0])
-        y = _biexp_bright(true, t) + RNG.normal(0, 0.3, size=T)
-        # Intentionally far-from-truth starting point so the round-3 IRLS from
-        # x_start ends in a worse local minimum than the IRLS from x0_B.
-        x0 = np.array([200.0, 200.0, 200.0, 1.0, 50000.0, 60.0, 50000.0])
-        bounds = [
-            (-1e3, 1e3), (0.0, 1e3), (0.0, 1e3), (0.0, 1e3),
-            (1.0, 1e5), (1.0, 1e5), (1.0, 1e5),
-        ]
-        M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
+    def test_round_1_when_frac_below_sufficient(self):
+        """sigma_relax_threshold=0.0 → round 1 always sufficient."""
+        y, t, _ = _decay_trace(noise_sd=0.3)
+        x0 = np.array([1.0, 1.0, 50.0])
+        M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
         fitted, res = nonlinear_fit(
-            y, t, _biexp_bright, x0, bounds=bounds,
-            backend="jax", M=M, fixed_sigma=0.3,
-            sigma_relax_threshold=0.99,
-            use_bright_constraint=True,
+            y, t, sum_of_exps, x0,
+            backend="numpy", M=M, fixed_sigma=0.3,
+            sigma_relax_threshold=0.0,  # never triggers round 2
         )
-        assert res.round == 3
-        # Whichever branch fires, the result is well-defined.
-        assert getattr(res, "x0_used", None) in ("A", "B", None)
+        assert res.round == 1
 
-    def test_round_2_returns_when_use_bright_constraint_false(self):
-        """use_bright_constraint=False short-circuits round 3 → returns at round 2
-        (lines 621-622) even if pass-2 fitted has some negatives.
-        """
-        T = 800
-        t = np.arange(T, dtype=float) + 1.0
-        true = np.array([5.0, 0.0, 0.0, 50.0, 1800.0, 60.0, 30.0])
-        y = _biexp_bright(true, t) + RNG.normal(0, 0.3, size=T)
-        x0 = np.array([5.0, 0.0, 0.0, 0.0, 1800.0, 60.0, 100.0])
-        bounds = [
-            (-1e3, 1e3), (0.0, 1e3), (0.0, 1e3), (0.0, 1e3),
-            (1.0, 1e5), (1.0, 1e5), (1.0, 1e5),
-        ]
-        M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
-        fitted, res = nonlinear_fit(
-            y, t, _biexp_bright, x0, bounds=bounds,
-            backend="jax", M=M, fixed_sigma=0.3,
-            sigma_relax_threshold=0.99,  # force pass 2
-            use_bright_constraint=False,  # skip round 3 → exit at round 2
-        )
-        assert res.round == 2
 
 
 # ---------------------------------------------------------------------------
@@ -398,11 +353,11 @@ class TestFitBaseline:
     """Cover the fit_baseline orchestrator and its M_fluctuations defaulting."""
 
     def test_fit_baseline_no_M(self):
-        """M=None → M_fluctuations=None branch in line 1019-1020."""
+        """M=None → M_fluctuations=None branch."""
         y, t, _ = _decay_trace(noise_sd=0.5, T=300)
         x0 = np.array([1.0, 1.0, 50.0])
         F0, F0trend, res, info = fit_baseline(
-            y, t, single_exp, x0, backend="numpy",
+            y, t, sum_of_exps, x0, backend="numpy",
         )
         assert F0.shape == y.shape
         assert F0trend.shape == y.shape
@@ -414,7 +369,7 @@ class TestFitBaseline:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         F0, F0trend, res, info = fit_baseline(
-            y, t, single_exp, x0, backend="numpy", M=M, fixed_sigma=0.5,
+            y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.5,
         )
         assert F0.shape == y.shape
 
@@ -457,32 +412,32 @@ class TestPlotDff:
 # 10. nonlinear_fit — model-without-return_jac path
 # ---------------------------------------------------------------------------
 
-def _single_exp_no_jac(params, t):
-    """Wrapper around single_exp that exposes no ``return_jac`` parameter.
+def _sum_of_exps_no_jac(params, t):
+    """Wrapper around sum_of_exps that exposes no ``return_jac`` parameter.
 
     Used to force ``has_return_jac=False`` so the value-only branches of the
-    numpy-backend objective factories are exercised (lines 496-497, 508-510).
+    numpy-backend objective factories are exercised.
     """
-    return single_exp(params, t)
+    return sum_of_exps(params, t)
 
 
 class TestNonlinearFitNoJacobianModel:
     """When the model has no return_jac parameter, the objective uses the value-only path."""
 
     def test_ols_value_only_path(self):
-        """numpy OLS without a model Jacobian (lines 496-497)."""
+        """numpy OLS without a model Jacobian."""
         y, t, _ = _decay_trace()
         x0 = np.array([1.0, 1.0, 50.0])
-        fitted, res = nonlinear_fit(y, t, _single_exp_no_jac, x0, backend="numpy")
+        fitted, res = nonlinear_fit(y, t, _sum_of_exps_no_jac, x0, backend="numpy")
         assert fitted.shape == y.shape
 
     def test_robust_value_only_path(self):
-        """numpy IRLS without a model Jacobian (lines 508-510)."""
+        """numpy IRLS without a model Jacobian."""
         y, t, _ = _decay_trace(noise_sd=0.3)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         fitted, res = nonlinear_fit(
-            y, t, _single_exp_no_jac, x0,
+            y, t, _sum_of_exps_no_jac, x0,
             backend="numpy", M=M, fixed_sigma=0.3,
         )
         assert fitted.shape == y.shape
@@ -496,28 +451,28 @@ class TestNonlinearFitMadSigma:
     """Cover the per-iteration MAD/std sigma estimation branches in _run_irls."""
 
     def test_numpy_irls_estimates_sigma_each_iter(self):
-        """numpy backend, M given, no fixed_sigma → statsmodels.scale.mad path (lines 573-574)."""
+        """numpy backend, M given, no fixed_sigma → statsmodels.scale.mad path."""
         y, t, _ = _decay_trace(noise_sd=0.5, T=300)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         fitted, res = nonlinear_fit(
-            y, t, single_exp, x0, backend="numpy", M=M, maxiter=2,
+            y, t, sum_of_exps, x0, backend="numpy", M=M, maxiter=2,
         )
         assert fitted.shape == y.shape
 
     def test_jax_irls_estimates_sigma_each_iter(self):
-        """JAX backend, M given, no fixed_sigma → jnp.median MAD path (lines 570-572)."""
+        """JAX backend, M given, no fixed_sigma → jnp.median MAD path."""
         y, t, _ = _decay_trace(noise_sd=0.5, T=300)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         fitted, res = nonlinear_fit(
-            y, t, single_exp, x0,
+            y, t, sum_of_exps, x0,
             backend="jax", M=M, maxiter=2, dtype=jnp.float64,
         )
         assert fitted.shape == y.shape
 
     def test_numpy_irls_sigma_zero_falls_back_to_std(self):
-        """When MAD == 0 (noiseless trace fits exactly), sigma falls back to std (lines 575-576).
+        """When MAD == 0 (noiseless trace fits exactly), sigma falls back to std.
 
         With a noiseless trace the OLS pre-pass converges to ground truth so
         ``resid`` is all zeros → ``scale.mad`` returns 0 and the fallback
@@ -526,12 +481,12 @@ class TestNonlinearFitMadSigma:
         T = 200
         t = np.arange(T, dtype=float)
         true = np.array([5.0, 10.0, 30.0])
-        y = single_exp(true, t)  # NO noise
+        y = sum_of_exps(true, t)  # NO noise
         x0 = true.copy()  # start at truth
         M = AsymmetricTukeyBiweight()
         # The fit will probably fail or return NaN at sigma=0, but the code path executes.
         fitted, res = nonlinear_fit(
-            y, t, single_exp, x0, backend="numpy", M=M, maxiter=1,
+            y, t, sum_of_exps, x0, backend="numpy", M=M, maxiter=1,
         )
         assert fitted.shape == y.shape
 
