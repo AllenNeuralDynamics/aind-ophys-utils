@@ -69,6 +69,17 @@ def sum_of_exps(
     J : np.ndarray, optional
         Jacobian with respect to ``params``, shape ``(len(t), len(params))``.
         Returned only when ``return_jac=True``.
+
+    Notes
+    -----
+    **Sign convention for amplitudes.** Negative amplitudes are intentionally
+    permitted — they encode "suppression" terms. A ``+b_i·exp(-t/tau_i)`` with
+    ``b_i <= 0`` is equivalent to a ``-|b_i|·exp(-t/tau_i)`` brightening-suppression
+    term in the older standalone ``bright`` model. The function imposes no sign
+    constraint; callers that need non-negative amplitudes (or non-positive ones for
+    explicit suppression slots) must supply explicit ``bounds`` to the fit harness
+    (e.g. ``nonlinear_fit`` or ``fit_baseline``) — those harnesses do not enforce
+    a sign default.
     """
     n = len(params)
     has_const = n % 2 == 1
