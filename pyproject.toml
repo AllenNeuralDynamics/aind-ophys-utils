@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "aind-ophys-utils"
 description = "Generated from aind-library-template"
 license = {text = "MIT"}
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 authors = [
     {name = "Allen Institute for Neural Dynamics"}
 ]
@@ -17,11 +17,14 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    'h5py',
-    'imageio-ffmpeg',
-    'pandas',
-    'scikit-image',
-    'torch'
+    'h5py==3.16.0',
+    'imageio-ffmpeg==0.6.0',
+    'jax==0.6.2',
+    'matplotlib==3.10.9',
+    'pandas==2.3.3',
+    'scikit-image==0.25.2',
+    'statsmodels==0.14.6',
+    'torch==2.12.0'
 ]
 
 [project.optional-dependencies]
