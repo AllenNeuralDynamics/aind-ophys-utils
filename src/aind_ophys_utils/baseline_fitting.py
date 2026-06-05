@@ -214,7 +214,7 @@ class TukeyBiweight(AsymmetricTukeyBiweight):
 # -----------------------------
 #  Fitting Functions
 # -----------------------------
-def nonlinear_fit(
+def nonlinear_fit(  # noqa: C901
     # --- data / model ---
     trace: np.ndarray,
     t: np.ndarray,
