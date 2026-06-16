@@ -17,14 +17,14 @@ readme = "README.md"
 dynamic = ["version"]
 
 dependencies = [
-    'h5py==3.16.0',
-    'imageio-ffmpeg==0.6.0',
-    'jax==0.6.2',
-    'matplotlib==3.10.9',
-    'pandas==2.3.3',
-    'scikit-image==0.25.2',
-    'statsmodels==0.14.6',
-    'torch==2.12.0'
+    'h5py>=3.10',
+    'imageio-ffmpeg>=0.5',
+    'jax>=0.4',
+    'matplotlib>=3.7',
+    'pandas>=2.0',
+    'scikit-image>=0.21',
+    'statsmodels>=0.14',
+    'torch>=2.0'
 ]
 
 [project.optional-dependencies]
