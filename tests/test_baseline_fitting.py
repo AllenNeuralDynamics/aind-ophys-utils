@@ -247,6 +247,57 @@ class TestFitBaselineRound2:
 
 
 # ---------------------------------------------------------------------------
+# 5b. nonlinear_fit — sigma annealing under heavy one-sided activity
+# ---------------------------------------------------------------------------
+
+def _high_activity_trace(activity_frac, amp, noise_sd=0.3, T=400, seed=7):
+    """Decay baseline with dense one-sided (positive) activity transients."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(T, dtype=float)
+    base = sum_of_exps(np.array([5.0, 10.0, 30.0]), t)
+    y = base + rng.normal(0, noise_sd, T)
+    idx = rng.choice(T, int(activity_frac * T), replace=False)
+    y[idx] += amp * noise_sd * rng.exponential(1.0, len(idx))
+    return y, t, base
+
+
+class TestNonlinearFitSigmaAnneal:
+    """Graduated sigma annealing recovers the baseline under heavy activity."""
+
+    def _rmse(self, a, b):
+        """Root-mean-square error between two arrays."""
+        return float(np.sqrt(np.mean((a - b) ** 2)))
+
+    @pytest.mark.parametrize("backend", ["numpy", "jax"])
+    def test_annealing_recovers_baseline_where_single_jump_fails(self, backend):
+        """steps=1 (legacy jump) collapses; default steps>=3 tracks the baseline."""
+        y, t, base = _high_activity_trace(activity_frac=0.60, amp=8.0)
+        x0 = np.array([1.0, 1.0, 50.0])
+        bounds = [(-50, 50), (-50, 50), (1, 200)]
+        M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
+        kw = dict(M=M, fixed_sigma=0.3, backend=backend)
+
+        f_jump, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds,
+                                  sigma_anneal_steps=1, **kw)
+        f_anneal, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds,
+                                    sigma_anneal_steps=4, **kw)
+
+        assert self._rmse(f_jump, base) > 5.0       # single jump lands in bad basin
+        assert self._rmse(f_anneal, base) < 1.0     # annealing recovers the truth
+
+    def test_easy_regime_unaffected_by_anneal_steps(self):
+        """Sparse activity: annealing and single-jump converge to the same fit."""
+        y, t, base = _high_activity_trace(activity_frac=0.10, amp=6.0)
+        x0 = np.array([1.0, 1.0, 50.0])
+        bounds = [(-50, 50), (-50, 50), (1, 200)]
+        M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
+        kw = dict(M=M, fixed_sigma=0.3, backend="numpy")
+        f1, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds, sigma_anneal_steps=1, **kw)
+        f4, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds, sigma_anneal_steps=4, **kw)
+        assert np.allclose(f1, f4, atol=1e-4)
+
+
+# ---------------------------------------------------------------------------
 # 6. robust_lowess — both with and without M
 # ---------------------------------------------------------------------------
 
