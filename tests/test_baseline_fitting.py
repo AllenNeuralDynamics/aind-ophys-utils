@@ -17,7 +17,6 @@ from aind_ophys_utils.baseline_fitting import (  # noqa: E402
     fit_baseline,
     fit_baseline_fluctuations,
     nonlinear_fit,
-    plot_dff,
     robust_lowess,
     sum_of_exps,
 )
@@ -374,41 +373,7 @@ class TestFitBaseline:
 
 
 # ---------------------------------------------------------------------------
-# 9. plot_dff — smoke tests covering both inset / no-inset paths
-# ---------------------------------------------------------------------------
-
-class TestPlotDff:
-    """Smoke-test plot_dff to cover both rendering paths (lines 1064-1159)."""
-
-    def _data(self, T=400):
-        """Synthesise (F, F0, F0trend, t) inputs suitable for plot_dff."""
-        t = np.linspace(0.0, 100.0, T)
-        F0trend = 50.0 + 20.0 * np.exp(-t / 30.0)
-        F0 = F0trend * (1.0 + 0.02 * np.sin(t / 5.0))
-        F = F0 * (1.0 + RNG.normal(0, 0.02, size=T))
-        return F, F0, F0trend, t
-
-    def test_with_insets_and_roi_id(self):
-        """Default zoom_duration > 0 → renders 6-row layout with zoom insets."""
-        import matplotlib.pyplot as plt
-
-        F, F0, F0trend, t = self._data()
-        plot_dff(F, F0, F0trend, t=t, zoom_duration=20.0, roi_id=42)
-        plt.close("all")
-
-    def test_without_insets_and_no_t(self):
-        """zoom_duration=None + t=None → uses 4-row layout and frame indices."""
-        import matplotlib.pyplot as plt
-
-        F, F0, F0trend, _ = self._data()
-        # t=None forces the np.arange(len(F)) branch (line 1064-1065);
-        # the resulting t[1] == 1 chooses the 'Time [frames]' x-label.
-        plot_dff(F, F0, F0trend, t=None, zoom_duration=None, roi_id=None)
-        plt.close("all")
-
-
-# ---------------------------------------------------------------------------
-# 10. nonlinear_fit — model-without-return_jac path
+# 9. nonlinear_fit — model-without-return_jac path
 # ---------------------------------------------------------------------------
 
 def _sum_of_exps_no_jac(params, t):
@@ -443,7 +408,7 @@ class TestNonlinearFitNoJacobianModel:
 
 
 # ---------------------------------------------------------------------------
-# 11. nonlinear_fit IRLS — sigma estimation paths when fixed_sigma is None
+# 10. nonlinear_fit IRLS — sigma estimation paths when fixed_sigma is None
 # ---------------------------------------------------------------------------
 
 class TestNonlinearFitMadSigma:
@@ -491,7 +456,7 @@ class TestNonlinearFitMadSigma:
 
 
 # ---------------------------------------------------------------------------
-# 12. robust_lowess — convergence break and sigma=0 fallback
+# 11. robust_lowess — convergence break and sigma=0 fallback
 # ---------------------------------------------------------------------------
 
 class TestRobustLowessEdgeCases:
