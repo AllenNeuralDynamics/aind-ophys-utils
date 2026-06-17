@@ -225,7 +225,253 @@ class TukeyBiweight(AsymmetricTukeyBiweight):
 # -----------------------------
 #  Fitting Functions
 # -----------------------------
-def nonlinear_fit(  # noqa: C901
+def nonlinear_fit(
+    # --- data / model ---
+    trace: np.ndarray,
+    t: np.ndarray,
+    model: Callable,
+    x0: np.ndarray,
+    bounds: tuple[tuple[float, float], ...] | None = None,
+    # --- robust / IRLS ---
+    M: RobustNorm | None = None,
+    weights: np.ndarray | None = None,
+    fixed_sigma: float | None = None,
+    maxiter: int = 5,
+    tol: float = 1e-3,
+    # --- optimizer ---
+    optimizer: str = "L-BFGS-B",
+    optimizer_options: dict | None = None,
+    # --- backend ---
+    backend: Literal["numpy", "jax"] = "numpy",
+    dtype=jnp.float64,
+) -> tuple[np.ndarray, OptimizeResult]:
+    """
+    Fit a nonlinear model to a 1-D trace using OLS or robust IRLS.
+
+    Supports two backends:
+
+    - ``"numpy"``: uses analytic Jacobian if ``model`` accepts
+      ``return_jac=True``, otherwise falls back to the optimizer's numerical
+      gradient estimate.
+    - ``"jax"``: differentiates ``model`` automatically via
+      ``jax.value_and_grad``; the ``model`` need not support ``return_jac``.
+
+    Parameters
+    ----------
+    trace : np.ndarray
+        Observed signal, shape ``(N,)``.
+    t : np.ndarray
+        Time vector passed to ``model``, shape ``(N,)``.
+    model : callable
+        ``model(params, t) -> np.ndarray | jax.Array``.
+        For the numpy backend, may optionally support
+        ``model(params, t, return_jac=True) -> (np.ndarray, np.ndarray)``,
+        returning ``(prediction, J)`` where ``J`` has shape ``(N, n_params)``.
+        For the JAX backend, it's wrapped automatically if the model has an
+        xp parameter.
+    x0 : np.ndarray
+        Initial parameter vector, shape ``(n_params,)``.
+    bounds : sequence of (min, max) pairs or None
+        Parameter bounds passed to ``scipy.optimize.minimize``.
+    M : RobustNorm or None
+        M-estimator norm (e.g. ``TukeyBiweight``).
+        ``None`` → ordinary least squares (OLS).
+        Otherwise → iteratively re-weighted least squares (IRLS) using
+        ``M.rho`` for the loss and ``M.psi`` for the gradient.
+        For the JAX backend, it's converted automatically via ``with_xp(jnp)``.
+    weights : np.ndarray or None
+        Per-point weights, shape ``(N,)``, multiplied into the OLS loss only;
+        does not affect the robust IRLS objective. When ``M=None``, this
+        performs weighted OLS. When ``M`` is set, it warm-starts the OLS
+        pre-pass from a prior fit's ``res.weights``. ``None`` → uniform weights.
+    fixed_sigma : float or None
+        Fixed robust scale estimate. When provided, replaces the per-iteration
+        MAD estimate in the IRLS loop. Useful when the scale is known in
+        advance or inherited from a previous fit.
+    maxiter : int
+        Maximum number of IRLS outer iterations. Ignored when ``M=None``.
+    tol : float
+        IRLS convergence tolerance on the relative parameter change
+        ``‖x_new − x‖ / (‖x‖ + ε)``.
+    optimizer : str
+        Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
+    optimizer_options : dict or None
+        Options forwarded to ``scipy.optimize.minimize``.
+        Defaults to ``{"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}``.
+    backend : {"numpy", "jax"}
+        Numerical backend. ``"jax"`` enables automatic differentiation and
+        JIT compilation; ``"numpy"`` uses model-bundled Jacobians when
+        available.
+    dtype : jax dtype
+        Floating-point precision for the JAX backend, default
+        ``jnp.float64``. Requires ``jax_enable_x64=True``.
+
+    Returns
+    -------
+    fitted : np.ndarray
+        Model prediction at the converged parameters, shape ``(N,)``.
+    res : OptimizeResult
+        Result from the final ``scipy.optimize.minimize`` call, with
+        additional attributes ``res.sigma`` (float, robust scale estimate)
+        and ``res.weights`` (np.ndarray, shape ``(N,)``, M-estimator weights),
+        set only when ``M`` is not ``None``.
+    """
+    if optimizer_options is None:
+        optimizer_options = {"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}
+
+    use_jax = backend == "jax"
+    if use_jax:
+        if M is not None:
+            M = M.with_xp(jnp)
+        if "xp" in inspect.signature(model).parameters:
+            model = partial(model, xp=jnp)
+
+    # check once whether model supports return_jac
+    has_return_jac = not use_jax and "return_jac" in inspect.signature(model).parameters
+
+    if use_jax:
+        t_ = jnp.asarray(t, dtype=dtype)
+        y_ = jnp.asarray(trace, dtype=dtype)
+        x = jnp.asarray(x0, dtype=dtype)
+        w_ = jnp.asarray(weights, dtype=dtype) if weights is not None else None
+
+        def _make_obj(loss_and_grad_fn):
+            cache = {}
+
+            def fun(theta):
+                val, grad = loss_and_grad_fn(jnp.asarray(theta, dtype=dtype))
+                cache["g"] = np.array(grad)
+                return float(val)
+
+            return fun, lambda theta: cache["g"]
+
+        def _ols_loss(theta):
+            r = y_ - model(theta, t_)
+            return jnp.sum(w_ * r**2) if w_ is not None else jnp.sum(r**2)
+
+        ols_val_grad = jax.jit(jax.value_and_grad(_ols_loss))
+
+        if M is not None:
+
+            def _robust_loss(theta, sigma):
+                return jnp.sum(M.rho((y_ - model(theta, t_)) / sigma))
+
+            robust_val_grad = jax.jit(jax.value_and_grad(_robust_loss))
+    else:
+        t_ = np.asarray(t)
+        y_ = np.asarray(trace)
+        x = np.asarray(x0, dtype=float).copy()
+        w_ = np.asarray(weights) if weights is not None else None
+
+    # ----------------------------
+    # objective factories
+    # ----------------------------
+    def make_objective_numpy(sigma=None):
+        if sigma is None:
+
+            def obj(theta):
+                if has_return_jac:
+                    y_pred, J = model(theta, t_, return_jac=True)
+                    r = y_ - y_pred
+                    if w_ is not None:
+                        return np.sum(w_ * r**2), -2.0 * (J.T @ (w_ * r))
+                    return np.sum(r**2), -2.0 * J.T @ r
+                r = y_ - model(theta, t_)
+                return np.sum(w_ * r**2) if w_ is not None else np.sum(r**2)
+
+        else:
+
+            def obj(theta):
+                if has_return_jac:
+                    y_pred, J = model(theta, t_, return_jac=True)
+                    r = y_ - y_pred
+                    u = r / sigma
+                    return np.sum(M.rho(u)), -(J.T @ M.psi(u)) / sigma
+                r = y_ - model(theta, t_)
+                u = r / sigma
+                return np.sum(M.rho(u))
+
+        return obj
+
+    def make_objective_jax(sigma=None):
+        if sigma is None:
+            return _make_obj(ols_val_grad)
+        else:
+            return _make_obj(lambda theta: robust_val_grad(theta, sigma))
+
+    make_objective = make_objective_jax if use_jax else make_objective_numpy
+    provides_grad = use_jax or has_return_jac
+
+    # ----------------------------
+    # OLS — always runs; also serves as IRLS pre-pass for cold starts
+    # ----------------------------
+    fun_or_pair = make_objective()
+    fun, jac_ = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
+    res = minimize(
+        fun,
+        x,
+        bounds=bounds,
+        method=optimizer,
+        jac=jac_,
+        options=optimizer_options,
+    )
+    x = jnp.asarray(res.x, dtype=dtype) if use_jax else res.x
+
+    # ----------------------------
+    # IRLS
+    # ----------------------------
+    for i in range(max(1, maxiter) if M is not None else 0):
+        resid = y_ - model(x, t_)
+
+        if fixed_sigma is not None:  # use fixed sigma if provided
+            _sigma = fixed_sigma
+            if i == 0:
+                # If a 2-sigma residual gets weight < 0.5, inflate sigma so it
+                # maps to z* where M.weights(z*) = 0.5, easing in the M-estimator.
+                # Works for any M-estimator; float() handles JAX arrays too.
+                if float(min(M.weights(2), M.weights(-2))) < 0.5:
+                    z_half = brentq(
+                        lambda z: float(min(M.weights(z), M.weights(-z))) - 0.5,
+                        0.0,
+                        2.0,
+                    )
+                    _sigma *= 2.0 / z_half
+        elif use_jax:
+            _sigma = jnp.median(jnp.abs(resid)) * 1.4826
+            _sigma = jnp.where(_sigma == 0, jnp.std(resid), _sigma)
+        else:
+            _sigma = scale.mad(resid, center=0)
+            if _sigma == 0:
+                _sigma = np.std(resid)
+
+        fun_or_pair = make_objective(_sigma)
+        fun, jac_ = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
+        res = minimize(
+            fun,
+            x,
+            bounds=bounds,
+            method=optimizer,
+            jac=jac_,
+            options=optimizer_options,
+        )
+
+        x_new = jnp.asarray(res.x, dtype=dtype) if use_jax else res.x
+        norm = jnp.linalg.norm if use_jax else np.linalg.norm
+        if norm(x_new - x) / (norm(x) + 1e-12) < tol:
+            x = x_new
+            break
+        x = x_new
+
+    fitted = np.array(model(x, t_))
+    if M is not None:
+        res.sigma = float(_sigma)
+        u = (np.array(y_) - fitted) / float(_sigma)
+        res.weights = np.array(M.weights(u))
+    return fitted, res
+
+
+
+def nonlinear_fit_with_retry(  # noqa: C901
     # --- data / model ---
     trace: np.ndarray,
     t: np.ndarray,
@@ -867,7 +1113,7 @@ def fit_baseline(
     """
     if M_fluctuations is None:
         M_fluctuations = M.with_xp(np) if M is not None else None
-    F0trend, res = nonlinear_fit(
+    F0trend, res = nonlinear_fit_with_retry(
         trace,
         t,
         model,

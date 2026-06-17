@@ -16,7 +16,7 @@ from aind_ophys_utils.baseline_fitting import (  # noqa: E402
     TukeyBiweight,
     fit_baseline,
     fit_baseline_fluctuations,
-    nonlinear_fit,
+    nonlinear_fit_with_retry,
     robust_lowess,
     sum_of_exps,
 )
@@ -166,7 +166,7 @@ class TestNonlinearFitNumpy:
         """numpy backend, OLS path, model supplies a Jacobian."""
         y, t, true = _decay_trace()
         x0 = np.array([1.0, 1.0, 50.0])
-        fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
+        fitted, res = nonlinear_fit_with_retry(y, t, sum_of_exps, x0, backend="numpy")
         assert fitted.shape == y.shape
         assert np.allclose(res.x, true, atol=2.0)
 
@@ -175,7 +175,7 @@ class TestNonlinearFitNumpy:
         y, t, _ = _decay_trace()
         w = np.ones_like(y)
         x0 = np.array([1.0, 1.0, 50.0])
-        _, res = nonlinear_fit(
+        _, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0, backend="numpy", weights=w,
         )
         assert res.success or res.status >= 0
@@ -185,7 +185,7 @@ class TestNonlinearFitNumpy:
         y, t, true = _decay_trace(noise_sd=0.3)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.3,
         )
         assert fitted.shape == y.shape
@@ -205,7 +205,7 @@ class TestNonlinearFitJax:
         y, t, true = _decay_trace(noise_sd=0.3)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0,
             backend="jax", M=M, fixed_sigma=0.3, dtype=jnp.float64,
         )
@@ -225,7 +225,7 @@ class TestNonlinearFitRound2:
         y, t, _ = _decay_trace(noise_sd=0.3)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0,
             backend="jax", M=M, fixed_sigma=0.3,
             sigma_relax_threshold=0.99,  # forces round 2
@@ -238,7 +238,7 @@ class TestNonlinearFitRound2:
         y, t, _ = _decay_trace(noise_sd=0.3)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0,
             backend="numpy", M=M, fixed_sigma=0.3,
             sigma_relax_threshold=0.0,  # never triggers round 2
@@ -392,7 +392,7 @@ class TestNonlinearFitNoJacobianModel:
         """numpy OLS without a model Jacobian."""
         y, t, _ = _decay_trace()
         x0 = np.array([1.0, 1.0, 50.0])
-        fitted, res = nonlinear_fit(y, t, _sum_of_exps_no_jac, x0, backend="numpy")
+        fitted, res = nonlinear_fit_with_retry(y, t, _sum_of_exps_no_jac, x0, backend="numpy")
         assert fitted.shape == y.shape
 
     def test_robust_value_only_path(self):
@@ -400,7 +400,7 @@ class TestNonlinearFitNoJacobianModel:
         y, t, _ = _decay_trace(noise_sd=0.3)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, _sum_of_exps_no_jac, x0,
             backend="numpy", M=M, fixed_sigma=0.3,
         )
@@ -419,7 +419,7 @@ class TestNonlinearFitMadSigma:
         y, t, _ = _decay_trace(noise_sd=0.5, T=300)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0, backend="numpy", M=M, maxiter=2,
         )
         assert fitted.shape == y.shape
@@ -429,7 +429,7 @@ class TestNonlinearFitMadSigma:
         y, t, _ = _decay_trace(noise_sd=0.5, T=300)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0,
             backend="jax", M=M, maxiter=2, dtype=jnp.float64,
         )
@@ -449,7 +449,7 @@ class TestNonlinearFitMadSigma:
         x0 = true.copy()  # start at truth
         M = AsymmetricTukeyBiweight()
         # The fit will probably fail or return NaN at sigma=0, but the code path executes.
-        fitted, res = nonlinear_fit(
+        fitted, res = nonlinear_fit_with_retry(
             y, t, sum_of_exps, x0, backend="numpy", M=M, maxiter=1,
         )
         assert fitted.shape == y.shape
