@@ -1,15 +1,14 @@
 """Tests dff"""
+from itertools import product
+
 import matplotlib
+import numpy as np
+import pytest
+from numpy.testing import assert_array_almost_equal
+
+from aind_ophys_utils.dff import dff, plot_dff
 
 matplotlib.use("Agg")
-
-from itertools import product  # noqa: E402
-
-import numpy as np  # noqa: E402
-import pytest  # noqa: E402
-from numpy.testing import assert_array_almost_equal  # noqa: E402
-
-from aind_ophys_utils.dff import dff, plot_dff  # noqa: E402
 
 
 RNG = np.random.default_rng(42)
