@@ -580,7 +580,7 @@ def fit_baseline_fluctuations(
     trend: np.ndarray | None = None,
     # --- smoother ---
     mode: Literal["ratio", "subtract"] = "ratio",
-    frac: float = 0.1,
+    window: int = 40,
     method: Literal["lowess", "percentile"] = "lowess",
     # --- robust / IRLS ---
     M: RobustNorm | None = None,
@@ -611,10 +611,14 @@ def fit_baseline_fluctuations(
         How to detrend. ``"ratio"`` divides ``trace`` by ``trend``
         (use when fluorescence is multiplicatively modulated);
         ``"subtract"`` subtracts ``trend`` additively.
-    frac : float
-        Bandwidth as a fraction of ``N``. Controls the smoothing window
-        for both ``"lowess"`` (LOWESS bandwidth) and ``"percentile"``
-        (filter half-width).
+    window : float
+        Smoothing window in seconds. Converted to samples internally using
+        the frame rate derived from ``t`` (``fs = 1 / median(diff(t))``),
+        giving ``window_samples = round(window * fs)``. For ``"lowess"``,
+        the sample count is further converted to a fraction of the trace
+        length before being passed to :func:`robust_lowess`. For
+        ``"percentile"``, it is used directly as the filter half-width.
+        Default ``60.0``.
     method : {"lowess", "percentile"}
         Smoothing method.
         ``"lowess"`` — robust locally weighted regression via
@@ -678,14 +682,19 @@ def fit_baseline_fluctuations(
     else:
         y = (trace - trend).astype(np.float64)
 
+    # derive window in samples from frame rate
+    fs = 1.0 / np.median(np.diff(t))
+    window_samples = max(1, int(round(window * fs)))
+
     # dispatch — method-specific, receives y, returns fluctuation
     if method == "lowess":
+        frac = window_samples / len(y)
         fluctuation, w, sigma = robust_lowess(
             y, t, frac, M, weights, _sigma, maxiter, tol
         )
         info = {"lowess_weights": w, "lowess_sigma": sigma}
     elif method == "percentile":
-        size = max(1, round(frac * len(trace)))
+        size = window_samples
         if percentile is None:
             # estimate from weights if available
             mu_w = (
@@ -721,7 +730,7 @@ def fit_baseline(
     sigma_relax_threshold: float = 0.05,
     # --- smoother ---
     mode: Literal["ratio", "subtract"] = "ratio",
-    frac: float = 0.1,
+    window: float = 60.0,
     method: Literal["lowess", "percentile"] = "lowess",
     # --- percentile ---
     percentile: float | None = None,
@@ -784,9 +793,9 @@ def fit_baseline(
         How to detrend before estimating fluctuations. ``"ratio"`` divides
         ``trace`` by the trend (multiplicative); ``"subtract"`` removes it
         additively.
-    frac : float
-        Smoothing bandwidth as a fraction of ``N``, passed to
-        :func:`fit_baseline_fluctuations`.
+    window : float
+        Smoothing window in seconds, passed to
+        :func:`fit_baseline_fluctuations`. Default ``60.0``.
     method : {"lowess", "percentile"}
         Fluctuation estimation method.
     percentile : float or None
@@ -863,7 +872,7 @@ def fit_baseline(
         t,
         F0trend,
         mode,
-        frac,
+        window,
         method,
         M_fluctuations,
         weights,
