@@ -29,39 +29,20 @@ class TestPlotDff:
         F = F0 * (1.0 + RNG.normal(0, 0.02, size=T))
         return F, F0, F0trend, t
 
-    def test_full_baseline_with_insets(self):
-        """F0trend provided + zoom_duration > 0 → 6-row layout with insets."""
+    # every mode (full baseline / trend-only) × inset (on / off) combination
+    @pytest.mark.parametrize("with_trend, zoom", [
+        (True, 20.0),    # full baseline + insets  → 6-row layout
+        (True, None),    # full baseline, no insets → 4-row layout
+        (False, 20.0),   # trend-only + insets      → 3-row layout
+        (False, None),   # trend-only, no insets    → 2-row layout
+    ])
+    def test_render_paths(self, with_trend, zoom):
+        """plot_dff returns a figure for every mode × inset combination."""
         import matplotlib.pyplot as plt
 
         F, F0, F0trend, t = self._data()
-        fig = plot_dff(F, F0, t, F0trend, zoom_duration=20.0, roi_id=42)
-        assert fig is not None
-        plt.close("all")
-
-    def test_full_baseline_without_insets(self):
-        """F0trend provided + zoom_duration=None → 4-row layout, no insets."""
-        import matplotlib.pyplot as plt
-
-        F, F0, F0trend, t = self._data()
-        fig = plot_dff(F, F0, t, F0trend, zoom_duration=None)
-        assert fig is not None
-        plt.close("all")
-
-    def test_trend_only_with_insets(self):
-        """F0trend=None + zoom_duration > 0 → 3-row layout with insets."""
-        import matplotlib.pyplot as plt
-
-        F, F0, _, t = self._data()
-        fig = plot_dff(F, F0, t, zoom_duration=20.0)
-        assert fig is not None
-        plt.close("all")
-
-    def test_trend_only_without_insets(self):
-        """F0trend=None + zoom_duration=None → 2-row layout, no insets."""
-        import matplotlib.pyplot as plt
-
-        F, F0, _, t = self._data()
-        fig = plot_dff(F, F0, t, zoom_duration=None)
+        fig = plot_dff(F, F0, t, F0trend if with_trend else None,
+                       zoom_duration=zoom, roi_id=42 if with_trend else None)
         assert fig is not None
         plt.close("all")
 

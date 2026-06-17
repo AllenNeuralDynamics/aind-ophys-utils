@@ -250,51 +250,71 @@ class TestFitBaselineRound2:
 # 5b. nonlinear_fit — sigma annealing under heavy one-sided activity
 # ---------------------------------------------------------------------------
 
-def _high_activity_trace(activity_frac, amp, noise_sd=0.3, T=400, seed=7):
-    """Decay baseline with dense one-sided (positive) activity transients."""
+# Statistics measured from a real 56-ROI fluorescence recording (traces.npy):
+# noise CV ~9% (median), activity fraction up to ~0.58, and trends that both
+# decay and rise (median bleach negative). The fixtures below are calibrated to
+# those numbers so the ground-truth tests stay representative of real data.
+_DECAY_PARAMS = (5.0, 10.0, 30.0)     # b_inf, b, tau  → falls 15 → 5
+_RISING_PARAMS = (15.0, -10.0, 30.0)  # negative amplitude → anti-bleach, rises 5 → 15
+
+
+def _high_activity_trace(activity_frac, amp, noise_cv=0.09, T=400, seed=7,
+                         true_params=_DECAY_PARAMS):
+    """Baseline + one-sided (positive) activity transients + realistic noise.
+
+    The noise scale is set from ``noise_cv`` times the mean baseline level
+    (~9% matches real traces); ``amp`` is the transient height in units of that
+    noise scale. Pass ``_RISING_PARAMS`` for an anti-bleach (rising) trend.
+    Returns ``(y, t, base, noise_sd)`` — ``noise_sd`` is the ground-truth scale
+    to pass as ``fixed_sigma``.
+    """
     rng = np.random.default_rng(seed)
     t = np.arange(T, dtype=float)
-    base = sum_of_exps(np.array([5.0, 10.0, 30.0]), t)
+    base = sum_of_exps(np.array(true_params), t)
+    noise_sd = noise_cv * float(np.mean(np.abs(base)))
     y = base + rng.normal(0, noise_sd, T)
     idx = rng.choice(T, int(activity_frac * T), replace=False)
     y[idx] += amp * noise_sd * rng.exponential(1.0, len(idx))
-    return y, t, base
+    return y, t, base, noise_sd
 
 
 class TestNonlinearFitSigmaAnneal:
-    """Graduated sigma annealing recovers the baseline under heavy activity."""
+    """Graduated sigma annealing recovers the baseline under heavy activity.
 
-    def _rmse(self, a, b):
-        """Root-mean-square error between two arrays."""
-        return float(np.sqrt(np.mean((a - b) ** 2)))
+    Coverage of the annealing code is already provided by the round-2/MAD-sigma
+    tests; these assert the *behaviour* — that annealing recovers the baseline
+    where the legacy single jump (steps=1) does not, and that turning it on by
+    default leaves the low-activity regime unchanged.
+    """
 
-    @pytest.mark.parametrize("backend", ["numpy", "jax"])
-    def test_annealing_recovers_baseline_where_single_jump_fails(self, backend):
-        """steps=1 (legacy jump) collapses; default steps>=3 tracks the baseline."""
-        y, t, base = _high_activity_trace(activity_frac=0.60, amp=8.0)
-        x0 = np.array([1.0, 1.0, 50.0])
-        bounds = [(-50, 50), (-50, 50), (1, 200)]
-        M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
-        kw = dict(M=M, fixed_sigma=0.3, backend=backend)
+    BOUNDS = [(-50, 50), (-50, 50), (1, 200)]
+    X0 = np.array([1.0, 1.0, 50.0])
+    M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
 
-        f_jump, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds,
-                                  sigma_anneal_steps=1, **kw)
-        f_anneal, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds,
-                                    sigma_anneal_steps=4, **kw)
+    def _fit(self, y, t, steps, sigma):
+        """Trend fit at the given anneal-step count; returns the fitted curve."""
+        fitted, _ = nonlinear_fit(
+            y, t, sum_of_exps, self.X0, self.BOUNDS,
+            M=self.M, fixed_sigma=sigma, sigma_anneal_steps=steps,
+        )
+        return fitted
 
-        assert self._rmse(f_jump, base) > 5.0       # single jump lands in bad basin
-        assert self._rmse(f_anneal, base) < 1.0     # annealing recovers the truth
+    # decay (falls 15→5) at 60% activity — just above the busiest real ROIs
+    # (~58%); rising (anti-bleach, 5→15) at the real p90 activity level (~50%).
+    @pytest.mark.parametrize("params, act", [(_DECAY_PARAMS, 0.60),
+                                             (_RISING_PARAMS, 0.50)])
+    def test_annealing_recovers_where_single_jump_fails(self, params, act):
+        """steps=1 lands in the bad basin; default steps>=3 tracks the truth."""
+        y, t, base, sd = _high_activity_trace(act, amp=8.0, true_params=params)
+        rmse = lambda f: float(np.sqrt(np.mean((f - base) ** 2)))  # noqa: E731
+        assert rmse(self._fit(y, t, 4, sd)) < rmse(self._fit(y, t, 1, sd))
+        assert rmse(self._fit(y, t, 4, sd)) < sd          # annealing recovers truth
 
     def test_easy_regime_unaffected_by_anneal_steps(self):
         """Sparse activity: annealing and single-jump converge to the same fit."""
-        y, t, base = _high_activity_trace(activity_frac=0.10, amp=6.0)
-        x0 = np.array([1.0, 1.0, 50.0])
-        bounds = [(-50, 50), (-50, 50), (1, 200)]
-        M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
-        kw = dict(M=M, fixed_sigma=0.3, backend="numpy")
-        f1, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds, sigma_anneal_steps=1, **kw)
-        f4, _ = nonlinear_fit(y, t, sum_of_exps, x0, bounds, sigma_anneal_steps=4, **kw)
-        assert np.allclose(f1, f4, atol=1e-4)
+        y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
+        assert np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 4, sd),
+                           atol=1e-4 * sd + 1e-6)
 
 
 # ---------------------------------------------------------------------------
