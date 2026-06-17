@@ -300,15 +300,24 @@ class TestNonlinearFitSigmaAnneal:
         return fitted
 
     # decay (falls 15→5) at 60% activity — just above the busiest real ROIs
-    # (~58%); rising (anti-bleach, 5→15) at the real p90 activity level (~50%).
-    @pytest.mark.parametrize("params, act", [(_DECAY_PARAMS, 0.60),
-                                             (_RISING_PARAMS, 0.50)])
-    def test_annealing_recovers_where_single_jump_fails(self, params, act):
-        """steps=1 lands in the bad basin; default steps>=3 tracks the truth."""
+    # (~58%) — collapses the single jump; rising (anti-bleach, 5→15) at the real
+    # p90 activity (~50%) is mild enough that both succeed, so there annealing
+    # only has to match, not beat, the jump.
+    @pytest.mark.parametrize("params, act, jump_collapses", [
+        (_DECAY_PARAMS, 0.60, True),
+        (_RISING_PARAMS, 0.50, False),
+    ])
+    def test_annealing_recovers_baseline(self, params, act, jump_collapses):
+        """Annealing recovers the truth and is never worse than the single jump."""
         y, t, base, sd = _high_activity_trace(act, amp=8.0, true_params=params)
         rmse = lambda f: float(np.sqrt(np.mean((f - base) ** 2)))  # noqa: E731
-        assert rmse(self._fit(y, t, 4, sd)) < rmse(self._fit(y, t, 1, sd))
-        assert rmse(self._fit(y, t, 4, sd)) < sd          # annealing recovers truth
+        r_anneal = rmse(self._fit(y, t, 4, sd))
+        r_jump = rmse(self._fit(y, t, 1, sd))
+        assert r_anneal < sd                          # annealing recovers the truth
+        # never worse than the jump, tolerant of optimizer/BLAS jitter (~1e-9)
+        assert r_anneal <= r_jump + 1e-6 * sd + 1e-9
+        if jump_collapses:
+            assert r_jump > sd                        # single jump lands in bad basin
 
     def test_easy_regime_unaffected_by_anneal_steps(self):
         """Sparse activity: annealing and single-jump converge to the same fit."""
