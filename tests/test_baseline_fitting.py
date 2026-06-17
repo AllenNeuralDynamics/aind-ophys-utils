@@ -330,7 +330,7 @@ class TestFitBaselineFluctuations:
         """method=percentile path is exercised (lines 878-887)."""
         trace, t, trend = self._trace_and_trend()
         baseline, _, info = fit_baseline_fluctuations(
-            trace, t, trend=trend, mode="subtract", method="percentile", window=40,
+            trace, t, trend=trend, mode="subtract", method="percentile", window=40.0,
         )
         assert "percentile" in info and "size" in info
 

@@ -154,7 +154,7 @@ def _dff_single_trace(
     return dff, baseline, noise_sd
 
 
-def _add_zoom_insets(ax_spacer, ax_dff, t, dff_trace, zoom_windows, color):
+def add_zoom_insets(ax_spacer, ax_dff, t, dff_trace, zoom_windows, color):
     """Attach three zoomed inset axes to *ax_spacer* and mark them on *ax_dff*."""
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
@@ -288,7 +288,7 @@ def plot_dff(
         ax[dff_row].set_ylabel(r"$\Delta$F/F [%]")
         ax[dff_row].legend(loc=1)
         if show_insets:
-            _add_zoom_insets(ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color)
+            add_zoom_insets(ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color)
 
     ax[-1].set_xlim(-0.01 * t[-1], 1.01 * t[-1])
     ax[-1].set_xlabel("Time [s]")

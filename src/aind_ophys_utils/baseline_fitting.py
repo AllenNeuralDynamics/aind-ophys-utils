@@ -580,7 +580,7 @@ def fit_baseline_fluctuations(
     trend: np.ndarray | None = None,
     # --- smoother ---
     mode: Literal["ratio", "subtract"] = "ratio",
-    window: int = 40,
+    window: float = 60.0,
     method: Literal["lowess", "percentile"] = "lowess",
     # --- robust / IRLS ---
     M: RobustNorm | None = None,
