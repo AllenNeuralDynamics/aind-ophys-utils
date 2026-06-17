@@ -110,14 +110,14 @@ class TestSumOfExps:
 
 
 # ---------------------------------------------------------------------------
-# 2. Tukey-biweight norms — branches not covered by dff_triexp tests
+# 2. Tukey-biweight norms — exercise the rho/psi/weights branches
 # ---------------------------------------------------------------------------
 
 class TestNorms:
     """Cover ATB validation + psi/weights/psi_deriv + OneSided / Tukey subclasses."""
 
     def test_init_rejects_nonpositive_c(self):
-        """Constructor raises on c_pos<=0 (line 202)."""
+        """Constructor raises on c_pos<=0."""
         with pytest.raises(ValueError, match="positive"):
             AsymmetricTukeyBiweight(c_pos=0.0)
         with pytest.raises(ValueError, match="positive"):
@@ -136,13 +136,13 @@ class TestNorms:
         assert M.psi_deriv(10.0) == 0.0
 
     def test_one_sided_quadratic_on_negative_side(self):
-        """OneSidedTukeyBiweight has c_neg=inf → _rho_half uses 0.5*z**2 (line 212)."""
+        """OneSidedTukeyBiweight has c_neg=inf → _rho_half uses 0.5*z**2."""
         M = OneSidedTukeyBiweight(c=4.685)
         # Large negative residual → uses the quadratic branch.
         assert M.rho(-3.0) == pytest.approx(0.5 * 9.0)
 
     def test_tukey_biweight_symmetric_rho(self):
-        """TukeyBiweight.rho is symmetric and matches _rho_half (lines 285, 289-290)."""
+        """TukeyBiweight.rho is symmetric and matches _rho_half."""
         M = TukeyBiweight(c=4.685)
         assert M.rho(1.0) == pytest.approx(M.rho(-1.0))
 
@@ -160,7 +160,7 @@ def _decay_trace(noise_sd=0.5, T=400):
 
 
 class TestNonlinearFitNumpy:
-    """nonlinear_fit on the numpy backend (lines 473-475, 486-512)."""
+    """nonlinear_fit on the numpy backend."""
 
     def test_ols_with_jacobian(self):
         """numpy backend, OLS path, model supplies a Jacobian."""
@@ -171,7 +171,7 @@ class TestNonlinearFitNumpy:
         assert np.allclose(res.x, true, atol=2.0)
 
     def test_ols_with_weights(self):
-        """numpy OLS branch with per-point weights (line 494)."""
+        """numpy OLS branch with per-point weights."""
         y, t, _ = _decay_trace()
         w = np.ones_like(y)
         x0 = np.array([1.0, 1.0, 50.0])
@@ -181,7 +181,7 @@ class TestNonlinearFitNumpy:
         assert res.success or res.status >= 0
 
     def test_robust_irls(self):
-        """numpy IRLS branch with an M-estimator (lines 499-510)."""
+        """numpy IRLS branch with an M-estimator."""
         y, t, true = _decay_trace(noise_sd=0.3)
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
@@ -193,8 +193,7 @@ class TestNonlinearFitNumpy:
 
 
 # ---------------------------------------------------------------------------
-# 4. nonlinear_fit — JAX backend already exercised indirectly via dff_triexp;
-#    add a direct smoke call so the public API stays covered.
+# 4. nonlinear_fit — JAX backend smoke test so the public API stays covered.
 # ---------------------------------------------------------------------------
 
 class TestNonlinearFitJax:
@@ -334,7 +333,7 @@ class TestRobustLowess:
     """Cover robust_lowess M=None and M=ATB paths."""
 
     def test_no_irls(self):
-        """M=None → single-pass LOWESS, sigma is None (lines 747-749)."""
+        """M=None → single-pass LOWESS, sigma is None."""
         T = 400
         t = np.arange(T, dtype=float)
         y = np.sin(t / 30.0) + RNG.normal(0, 0.1, size=T)
@@ -344,7 +343,7 @@ class TestRobustLowess:
         assert np.all(w == 1.0)
 
     def test_with_irls(self):
-        """M given → runs the outer IRLS loop, returns finite sigma (line 755+)."""
+        """M given → runs the outer IRLS loop, returns finite sigma."""
         T = 400
         t = np.arange(T, dtype=float)
         y = np.sin(t / 30.0) + RNG.normal(0, 0.1, size=T)
@@ -356,7 +355,7 @@ class TestRobustLowess:
         assert sigma is not None and sigma > 0
 
     def test_fixed_sigma(self):
-        """fixed_sigma bypasses the per-iteration MAD estimate (line 753)."""
+        """fixed_sigma bypasses the per-iteration MAD estimate."""
         T = 400
         t = np.arange(T, dtype=float)
         y = np.sin(t / 30.0) + RNG.normal(0, 0.1, size=T)
@@ -382,7 +381,7 @@ class TestFitBaselineFluctuations:
         return signal, t, trend
 
     def test_lowess_ratio_with_trend(self):
-        """method=lowess + mode=ratio → fluctuation is dimensionless and >0 (lines 866-868)."""
+        """method=lowess + mode=ratio → fluctuation is dimensionless and >0."""
         trace, t, trend = self._trace_and_trend()
         baseline, fluctuation, info = fit_baseline_fluctuations(
             trace, t, trend=trend, mode="ratio", method="lowess",
@@ -391,7 +390,7 @@ class TestFitBaselineFluctuations:
         assert "lowess_weights" in info
 
     def test_lowess_subtract_with_trend(self):
-        """method=lowess + mode=subtract → fluctuation is additive (line 870)."""
+        """method=lowess + mode=subtract → fluctuation is additive."""
         trace, t, trend = self._trace_and_trend()
         baseline, fluctuation, info = fit_baseline_fluctuations(
             trace, t, trend=trend, mode="subtract", method="lowess",
@@ -399,7 +398,7 @@ class TestFitBaselineFluctuations:
         assert baseline.shape == trace.shape
 
     def test_lowess_no_trend(self):
-        """trend=None branch → baseline == fluctuation (lines 864-865, 892-893)."""
+        """trend=None branch → baseline == fluctuation."""
         trace, t, _ = self._trace_and_trend()
         baseline, fluctuation, _ = fit_baseline_fluctuations(
             trace, t, trend=None, method="lowess",
@@ -407,7 +406,7 @@ class TestFitBaselineFluctuations:
         assert np.allclose(baseline, fluctuation)
 
     def test_percentile_branch(self):
-        """method=percentile path is exercised (lines 878-887)."""
+        """method=percentile path is exercised."""
         trace, t, trend = self._trace_and_trend()
         baseline, _, info = fit_baseline_fluctuations(
             trace, t, trend=trend, mode="subtract", method="percentile", window=40.0,
@@ -415,7 +414,7 @@ class TestFitBaselineFluctuations:
         assert "percentile" in info and "size" in info
 
     def test_unknown_method_raises(self):
-        """An unrecognised method raises ValueError (line 889)."""
+        """An unrecognised method raises ValueError."""
         trace, t, trend = self._trace_and_trend()
         with pytest.raises(ValueError, match="Unknown method"):
             fit_baseline_fluctuations(
@@ -540,10 +539,10 @@ class TestNonlinearFitMadSigma:
 # ---------------------------------------------------------------------------
 
 class TestRobustLowessEdgeCases:
-    """Cover the remaining robust_lowess branches (lines 757, 761)."""
+    """Cover the remaining robust_lowess branches."""
 
     def test_loose_tol_triggers_early_convergence(self):
-        """A loose tol triggers the ``if np.max(...) < tol: break`` early-exit (line 761)."""
+        """A loose tol triggers the ``if np.max(...) < tol: break`` early-exit."""
         T = 300
         t = np.arange(T, dtype=float)
         y = np.sin(t / 30.0) + RNG.normal(0, 0.1, size=T)
@@ -553,7 +552,7 @@ class TestRobustLowessEdgeCases:
         assert sigma is not None
 
     def test_zero_mad_falls_back_to_std(self):
-        """When LOWESS residuals are ~0, MAD=0 → fall back to std (line 757).
+        """When LOWESS residuals are ~0, MAD=0 → fall back to std.
 
         A perfectly-flat signal lets LOWESS recover the exact baseline,
         producing zero residuals; the sigma estimator then falls through to
