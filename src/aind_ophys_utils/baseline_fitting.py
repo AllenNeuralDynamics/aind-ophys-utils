@@ -225,7 +225,7 @@ class TukeyBiweight(AsymmetricTukeyBiweight):
 # -----------------------------
 #  Fitting Functions
 # -----------------------------
-def nonlinear_fit(
+def nonlinear_fit(  # noqa: C901
     # --- data / model ---
     trace: np.ndarray,
     t: np.ndarray,
@@ -336,9 +336,11 @@ def nonlinear_fit(
         w_ = jnp.asarray(weights, dtype=dtype) if weights is not None else None
 
         def _make_obj(loss_and_grad_fn):
+            """Wrap a JAX value-and-grad function as ``(fun, jac)`` callables for scipy.minimize."""
             cache = {}
 
             def fun(theta):
+                """Return loss as a Python float and stash the grad for the paired jac callable."""
                 val, grad = loss_and_grad_fn(jnp.asarray(theta, dtype=dtype))
                 cache["g"] = np.array(grad)
                 return float(val)
@@ -346,6 +348,7 @@ def nonlinear_fit(
             return fun, lambda theta: cache["g"]
 
         def _ols_loss(theta):
+            """OLS loss for the JAX backend; honors per-sample weights when provided."""
             r = y_ - model(theta, t_)
             return jnp.sum(w_ * r**2) if w_ is not None else jnp.sum(r**2)
 
@@ -354,6 +357,7 @@ def nonlinear_fit(
         if M is not None:
 
             def _robust_loss(theta, sigma):
+                """Robust IRLS loss for the JAX backend at a fixed sigma."""
                 return jnp.sum(M.rho((y_ - model(theta, t_)) / sigma))
 
             robust_val_grad = jax.jit(jax.value_and_grad(_robust_loss))
@@ -367,9 +371,15 @@ def nonlinear_fit(
     # objective factories
     # ----------------------------
     def make_objective_numpy(sigma=None):
+        """Build a scipy.minimize objective for the numpy backend.
+
+        Returns the OLS objective when ``sigma`` is None, the robust IRLS
+        objective at the given ``sigma`` otherwise.
+        """
         if sigma is None:
 
             def obj(theta):
+                """OLS objective; returns ``(loss, grad)`` if the model provides a Jacobian."""
                 if has_return_jac:
                     y_pred, J = model(theta, t_, return_jac=True)
                     r = y_ - y_pred
@@ -382,6 +392,7 @@ def nonlinear_fit(
         else:
 
             def obj(theta):
+                """Robust IRLS objective at fixed sigma; emits a Jacobian if the model has one."""
                 if has_return_jac:
                     y_pred, J = model(theta, t_, return_jac=True)
                     r = y_ - y_pred
@@ -394,6 +405,7 @@ def nonlinear_fit(
         return obj
 
     def make_objective_jax(sigma=None):
+        """Build a scipy.minimize ``(fun, jac)`` pair for the JAX backend at the given sigma."""
         if sigma is None:
             return _make_obj(ols_val_grad)
         else:
@@ -861,6 +873,3 @@ def fit_baseline(
         percentile,
     )
     return F0, F0trend, res, info
-
-
-
