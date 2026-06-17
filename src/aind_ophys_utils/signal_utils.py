@@ -1,7 +1,7 @@
 """ Utils for signal processing """
 
 from multiprocessing.pool import Pool, ThreadPool
-from typing import Optional, Tuple, Union
+
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ def percentile_filter(
     input: np.ndarray,
     percentile: float,
     size: int,
-    dtype: Optional[type] = None,
+    dtype: type | None = None,
 ) -> np.ndarray:
     """
     Fast 1D running percentile filter using reflection
@@ -29,7 +29,7 @@ def percentile_filter(
         The percentile parameter. Must be between 0 and 100 inclusive.
     size: int
         Length of the median filter to compute a rolling baseline.
-    dtype: Optional[type]
+    dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
 
@@ -66,7 +66,7 @@ def percentile_filter(
 
 
 def median_filter(
-    input: np.ndarray, size: int, dtype: Optional[type] = None
+    input: np.ndarray, size: int, dtype: type | None = None
 ) -> np.ndarray:
     """
     Fast 1D median filtering using reflection to
@@ -79,7 +79,7 @@ def median_filter(
         The input array.
     size: int
         Length of the median filter to compute a rolling baseline.
-    dtype: Optional[type]
+    dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
 
@@ -91,7 +91,7 @@ def median_filter(
 
 
 def nanmedian_filter(
-    input: np.ndarray, size: int, dtype: Optional[type] = None
+    input: np.ndarray, size: int, dtype: type | None = None
 ) -> np.array:
     """1D median filtering with nan values
 
@@ -150,7 +150,7 @@ def _fill_nan(input: np.ndarray) -> np.ndarray:
     return output
 
 
-def robust_std(x: np.ndarray, axis: int = -1) -> Union[float, np.ndarray]:
+def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
     """
     Compute the appropriately scaled median absolute deviation
     assuming normally distributed data. This is a robust statistic.
@@ -227,16 +227,16 @@ def _nanwelch_wrapper(args):
 def nanwelch(
     data: np.ndarray,
     fs: float = 1.0,
-    nperseg: Optional[int] = None,
-    noverlap: Optional[int] = None,
-    nfft: Optional[int] = None,
+    nperseg: int | None = None,
+    noverlap: int | None = None,
+    nfft: int | None = None,
     detrend: str = "constant",
     return_onesided: bool = True,
     scaling: str = "density",
     axis: int = -1,
     max_num_samples: int = 3072,
-    n_jobs: Optional[int] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
+    n_jobs: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Apply Welch's method to data of arbitrary dimensions, excluding NaNs.
 
@@ -263,7 +263,7 @@ def nanwelch(
         Axis along which the periodogram is computed.
     max_num_samples: int
         Number of samples used for computing the noise
-    n_jobs: Optional[int]
+    n_jobs: int | None
         The number of jobs to run in parallel.
 
     Returns
@@ -322,13 +322,13 @@ def noise_std(
     x: np.ndarray,
     method: str = "welch",
     max_num_samples: int = 3072,
-    noise_range: Tuple[float, float] = (0.25, 0.5),
+    noise_range: tuple[float, float] = (0.25, 0.5),
     filter_length: int = 31,
     axis: int = -1,
-    n_jobs: Optional[int] = None,
+    n_jobs: int | None = None,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     skipna: bool = False,
-) -> Union[float, np.ndarray]:
+) -> float | np.ndarray:
     """Estimate the standard deviation of the noise in input(s) `x`.
 
     Parameters
@@ -357,7 +357,7 @@ def noise_std(
     axis: int
         Axis along which the noise is computed.
         The default is over the last axis (i.e. ``axis=-1``).
-    n_jobs: Optional[int]
+    n_jobs: int | None
         The number of jobs to run in parallel.
     device: str, default is 'cuda' if GPU is available.
         Device to use when using FFT method; 'cuda' or 'cpu'.

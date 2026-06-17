@@ -1,7 +1,7 @@
 """ Utils for computing dF/F """
 from functools import partial
 from multiprocessing.pool import Pool
-from typing import Optional, Tuple, Union
+
 
 import numpy as np
 
@@ -19,8 +19,8 @@ def dff(
     fs: float = 30.0,
     inactive_percentile: int = 10,
     noise_method: str = "mad",
-    n_jobs: Optional[int] = None,
-) -> Tuple[np.ndarray, np.ndarray, Union[np.ndarray, float]]:
+    n_jobs: int | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray | float]:
     """
     Compute the "delta F over F" from the fluorescence trace(s).
     Uses configurable length median filters to compute baseline for
@@ -48,7 +48,7 @@ def dff(
     noise_method: string
         Method for computing the noise, see ..signal_utils.noise_std
         Choices: 'mad', 'fft', 'welch'
-    n_jobs: Optional[int]
+    n_jobs: int | None
         The number of jobs to run in parallel.
 
     Returns
@@ -93,11 +93,11 @@ def dff(
 
 def _dff_single_trace(
     F: np.ndarray,
-    noise_method: Union[str, float],
+    noise_method: str | float,
     long_filter_length: float,
     short_filter_length: float,
     inactive_percentile: int,
-) -> Tuple[np.ndarray, np.ndarray, float]:
+) -> tuple[np.ndarray, np.ndarray, float]:
     """
     Compute the "delta F over F" from the fluorescence trace.
     Uses configurable length median filters to compute baseline for
@@ -110,7 +110,7 @@ def _dff_single_trace(
     ----------
     F: np.ndarray
         1d numpy array of the neuropil-corrected fluorescence trace.
-    noise_method: Union[str, float]
+    noise_method: str | float
         Method for computing the noise, see ..signal_utils.noise_std.
         Choices: 'mad', 'fft', 'welch'
     long_filter_length: int
@@ -197,7 +197,7 @@ def plot_dff(
     F: np.ndarray,
     F0: np.ndarray,
     t: np.ndarray,
-    F0trend: Optional[np.ndarray] = None,
+    F0trend: np.ndarray | None = None,
     zoom_duration: float = 60.0,
     roi_id=None,
 ):
