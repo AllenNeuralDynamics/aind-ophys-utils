@@ -4,7 +4,7 @@ import warnings
 from functools import partial
 from itertools import product
 from multiprocessing.pool import Pool, ThreadPool
-from typing import Optional, Union
+
 
 import h5py
 import numpy as np
@@ -111,12 +111,12 @@ _nanmid = partial(_select, which="mid")
 
 
 def subsample_array(
-    array: Union[h5py.Dataset, np.ndarray],
+    array: h5py.Dataset | np.ndarray,
     factors: tuple,
     strategy: str = "first",
     skipna: bool = False,
-    n_jobs: Optional[int] = None,
-    dtype: Optional[type] = None,
+    n_jobs: int | None = None,
+    dtype: type | None = None,
 ) -> np.ndarray:
     """subsamples an array-like object along each axis i by factors[i]
 
@@ -130,9 +130,9 @@ def subsample_array(
         Subsampling strategy. 'first', 'last', 'mid'/'middle'.
     skipna: bool
         Exclude NaN values when computing the result.
-    n_jobs: Optional[int]
+    n_jobs: int | None
         The number of jobs to run in parallel.
-    dtype: Optional[type]
+    dtype: type | None
         The dtype of the returned array. By default, the same as
         the input dtype.
 
@@ -153,11 +153,11 @@ def subsample_array(
 
 
 def _subsample_array(
-    array: Union[h5py.Dataset, np.ndarray],
+    array: h5py.Dataset | np.ndarray,
     factors: tuple,
     strategy: str = "first",
-    n_jobs: Optional[int] = None,
-    dtype: Optional[type] = None,
+    n_jobs: int | None = None,
+    dtype: type | None = None,
 ) -> np.ndarray:
     """subsample w/o skipping nans"""
     T = array.shape[0]
@@ -196,11 +196,11 @@ def _subsample_array(
 
 
 def _subsample_array_nan(
-    array: Union[h5py.Dataset, np.ndarray],
+    array: h5py.Dataset | np.ndarray,
     factors: tuple,
     strategy: str = "first",
-    n_jobs: Optional[int] = None,
-    dtype: Optional[type] = None,
+    n_jobs: int | None = None,
+    dtype: type | None = None,
 ) -> np.ndarray:
     """subsample w/ skipping nans"""
     fun = {"first": _nanfirst, "last": _nanlast, "mid": _nanmid}[strategy]
@@ -246,7 +246,7 @@ def _format_factors(factors, output_fps, input_fps, ndim):
     """
     Auxiliary function to handle different formats of `factors`
 
-    factors : Union[None, int, Tuple[int, ...]]
+    factors : None | int | tuple[int, ...]
         The desired downsampling factors. This can be:
         - None: in which case the factors will be calculated from the
           input and output frame rates.
@@ -274,14 +274,14 @@ def _format_factors(factors, output_fps, input_fps, ndim):
 
 
 def downsample_array(
-    array: Union[h5py.Dataset, np.ndarray],
+    array: h5py.Dataset | np.ndarray,
     input_fps: float = 31.0,
     output_fps: float = 4.0,
-    factors: Union[tuple, int] = None,
+    factors: tuple | int = None,
     strategy: str = "mean",
     skipna: bool = False,
-    n_jobs: Optional[int] = None,
-    dtype: Optional[type] = None,
+    n_jobs: int | None = None,
+    dtype: type | None = None,
 ) -> np.ndarray:
     """Downsamples an array-like object along each axis i by factors[i]
 
@@ -301,9 +301,9 @@ def downsample_array(
         'first', 'last', 'mid'/'middle'.
     skipna: bool
         Exclude NaN values when computing the result.
-    n_jobs: Optional[int]
+    n_jobs: int | None
         The number of jobs to run in parallel.
-    dtype: Optional[type]
+    dtype: type | None
         The dtype of the returned array. By default, the same as
         the input dtype, except for the 'mean' and 'median' strategy.
         In the latter cases, an array of type float32 will be created if
@@ -352,11 +352,11 @@ def downsample_array(
 
 
 def _downsample_array_nan(
-    array: Union[h5py.Dataset, np.ndarray],
+    array: h5py.Dataset | np.ndarray,
     factors: tuple,
     fun: callable,
-    n_jobs: Optional[int] = None,
-    dtype: Optional[type] = None,
+    n_jobs: int | None = None,
+    dtype: type | None = None,
 ) -> np.ndarray:
     """downsample w/ skipping nans"""
     T = array.shape[0]
@@ -395,11 +395,11 @@ def _downsample_array_nan(
 
 
 def _downsample_array(
-    array: Union[h5py.Dataset, np.ndarray],
+    array: h5py.Dataset | np.ndarray,
     factors: tuple,
     fun: callable,
-    n_jobs: Optional[int] = None,
-    dtype: Optional[type] = None,
+    n_jobs: int | None = None,
+    dtype: type | None = None,
     strategy: str = "mean",
 ) -> np.ndarray:
     """downsample w/o skipping nans"""
@@ -483,8 +483,8 @@ def _downsample_array(
 
 def normalize_array(
     array: np.ndarray,
-    lower_cutoff: Optional[float] = None,
-    upper_cutoff: Optional[float] = None,
+    lower_cutoff: float | None = None,
+    upper_cutoff: float | None = None,
     dtype: type = np.uint8,
 ) -> np.ndarray:
     """
@@ -495,10 +495,10 @@ def normalize_array(
     ----------
     array: numpy.ndarray (float)
         array to be normalized
-    lower_cutoff: Optional[float]
+    lower_cutoff: float | None
         threshold, below which will be = dtype.min
         (if None, will be set to array.min())
-    upper_cutoff: Optional[float]
+    upper_cutoff: float | None
         threshold, above which will be = dtype.max
         (if None, will be set to array.max())
     dtype: type

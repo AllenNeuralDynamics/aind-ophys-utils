@@ -1,6 +1,6 @@
 """ Utils for video generation """
 from pathlib import Path
-from typing import Union
+
 
 import h5py
 import imageio_ffmpeg as mpg
@@ -44,7 +44,7 @@ def downsample_h5_video(
 
 
 def encode_video(
-    video: Union[h5py.Dataset, np.ndarray],
+    video: h5py.Dataset | np.ndarray,
     output_path: str,
     fps: float,
     bitrate: str = "0",

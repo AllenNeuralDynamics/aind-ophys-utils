@@ -3,7 +3,7 @@ from itertools import chain, product
 
 import numpy as np
 import pytest
-from numpy.testing import assert_array_almost_equal
+from numpy.testing import assert_allclose, assert_array_almost_equal
 
 from aind_ophys_utils.signal_utils import (
     median_filter,
@@ -139,3 +139,17 @@ def test_noise_std(x, expected, method, n_jobs):
     decimal = 0 if method == "fft" else 1
     assert_array_almost_equal(
         expected, noise_std(x, method, n_jobs=n_jobs), decimal)
+
+
+@pytest.mark.parametrize(
+    "x, expected",
+    [
+        (np.array([0, 1, 2, 3, np.nan]), np.nan),  # Has NaN
+        (np.random.randn(20, 10000), [1] * 20),  # just noise
+        (np.random.randn(10000, 1000), [1] * 10000),  # just noise
+        (np.hstack([np.random.randn(9000), [np.nan] * 1000]), 1),  # both
+    ],
+)
+def test_noise_std_nan(x, expected):
+    """Test noise_std with skipna=True"""
+    assert_allclose(noise_std(x, skipna=True), expected, rtol=1e-1, atol=1e-1)
