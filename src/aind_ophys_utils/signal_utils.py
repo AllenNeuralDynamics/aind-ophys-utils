@@ -6,6 +6,7 @@ from multiprocessing.pool import Pool, ThreadPool
 import numpy as np
 import pandas as pd
 import scipy
+import scipy.ndimage
 import torch
 from scipy import signal
 
@@ -17,9 +18,11 @@ def percentile_filter(
     dtype: type | None = None,
 ) -> np.ndarray:
     """
-    Fast 1D running percentile filter using reflection
-    to extend the input array beyond its boundaries.
-    Uses pandas if input and filter size are long, scipy if short.
+    Fast 1D running percentile filter with reflect boundary handling.
+
+    Uses :func:`scipy.ndimage.percentile_filter` which has O(log n) complexity
+    since scipy 1.15.0 and is faster than the pandas rolling quantile approach
+    across all input sizes and window sizes.
 
     Parameters
     ----------
@@ -41,28 +44,10 @@ def percentile_filter(
     if dtype is None:
         dtype = input.dtype
     if size > len(input):
-        return (np.percentile(input, percentile) * np.ones_like(input)).astype(
-            dtype
-        )
-    if size > 20 and len(input) > 200:
-        return (
-            pd.Series(
-                np.concatenate(
-                    (
-                        input[: size // 2][::-1],
-                        input,
-                        input[: -size // 2 - 1: -1],
-                    )
-                )
-            )
-            .rolling(size, center=True)
-            .quantile(percentile / 100)
-            .to_numpy(dtype)[size // 2: -size // 2]
-        )
-    else:
-        return scipy.ndimage.percentile_filter(
-            input, percentile, size, output=dtype
-        )
+        return (np.percentile(input, percentile) * np.ones_like(input)).astype(dtype)
+    return scipy.ndimage.percentile_filter(
+        input, percentile, size, output=dtype, mode="reflect"
+    )
 
 
 def median_filter(
