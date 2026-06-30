@@ -45,9 +45,7 @@ def percentile_filter(
         dtype = input.dtype
     if size > len(input):
         return (np.percentile(input, percentile) * np.ones_like(input)).astype(dtype)
-    return scipy.ndimage.percentile_filter(
-        input, percentile, size, output=dtype, mode="reflect"
-    )
+    return scipy.ndimage.percentile_filter(input, percentile, size, output=dtype)
 
 
 def median_filter(
