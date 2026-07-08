@@ -22,7 +22,8 @@ def percentile_filter(
 
     Uses :func:`scipy.ndimage.percentile_filter` which has O(log n) complexity
     since scipy 1.15.0 and is faster than the pandas rolling quantile approach
-    across all input sizes and window sizes.
+    across all input sizes and window sizes. Falls back to pandas rolling
+    quantile when the input contains NaN values.
 
     Parameters
     ----------
@@ -44,7 +45,15 @@ def percentile_filter(
     if dtype is None:
         dtype = input.dtype
     if size > len(input):
-        return (np.percentile(input, percentile) * np.ones_like(input)).astype(dtype)
+        return (np.nanpercentile(input, percentile) * np.ones_like(input)).astype(dtype)
+    if np.isnan(input).any():
+        padded = np.concatenate((input[:size // 2][::-1], input, input[:-size // 2 - 1:-1]))
+        return (
+            pd.Series(padded)
+            .rolling(size, center=True, min_periods=1)
+            .quantile(percentile / 100)
+            .to_numpy(dtype)[size // 2: -size // 2]
+        )
     return scipy.ndimage.percentile_filter(input, percentile, size, output=dtype)
 
 
