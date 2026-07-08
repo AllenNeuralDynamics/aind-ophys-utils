@@ -6,7 +6,7 @@ from multiprocessing.pool import Pool
 import numpy as np
 
 from aind_ophys_utils.signal_utils import (
-    nanmedian_filter,
+    median_filter,
     noise_std,
     percentile_filter,
 )
@@ -148,7 +148,7 @@ def _dff_single_trace(
     active_mask = F > (low_baseline + 3 * noise_sd)
     negative_mask = F < (low_baseline - 3 * noise_sd)
     inactive_trace[active_mask + negative_mask] = np.nan
-    baseline = nanmedian_filter(inactive_trace, long_filter_length)
+    baseline = median_filter(inactive_trace, long_filter_length, skipna=True)
     # Calculate dF/F
     dff = (F - baseline) / np.maximum(baseline, noise_sd)
     return dff, baseline, noise_sd

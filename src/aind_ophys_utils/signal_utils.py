@@ -16,14 +16,14 @@ def percentile_filter(
     percentile: float,
     size: int,
     dtype: type | None = None,
+    skipna: bool = False,
 ) -> np.ndarray:
     """
     Fast 1D running percentile filter with reflect boundary handling.
 
     Uses :func:`scipy.ndimage.percentile_filter` which has O(log n) complexity
-    since scipy 1.15.0 and is faster than the pandas rolling quantile approach
-    across all input sizes and window sizes. Falls back to pandas rolling
-    quantile when the input contains NaN values.
+    since scipy 1.15.0. When ``skipna=True``, falls back to a pandas rolling
+    quantile which ignores NaN values within each window.
 
     Parameters
     ----------
@@ -36,6 +36,9 @@ def percentile_filter(
     dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
+    skipna: bool
+        If True, NaN values are ignored within each window. If False (default),
+        NaNs propagate to the output.
 
     Returns
     -------
@@ -45,8 +48,9 @@ def percentile_filter(
     if dtype is None:
         dtype = input.dtype
     if size > len(input):
-        return (np.nanpercentile(input, percentile) * np.ones_like(input)).astype(dtype)
-    if np.isnan(input).any():
+        fn = np.nanpercentile if skipna else np.percentile
+        return (fn(input, percentile) * np.ones_like(input)).astype(dtype)
+    if skipna:
         padded = np.concatenate((input[:size // 2][::-1], input, input[:-size // 2 - 1:-1]))
         return (
             pd.Series(padded)
@@ -58,12 +62,13 @@ def percentile_filter(
 
 
 def median_filter(
-    input: np.ndarray, size: int, dtype: type | None = None
+    input: np.ndarray,
+    size: int,
+    dtype: type | None = None,
+    skipna: bool = False,
 ) -> np.ndarray:
     """
-    Fast 1D median filtering using reflection to
-    extend the input array beyond its boundaries.
-    Uses pandas if input and filter size are long, scipy if short.
+    Fast 1D median filtering with reflect boundary handling.
 
     Parameters
     ----------
@@ -74,18 +79,23 @@ def median_filter(
     dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
+    skipna: bool
+        If True, NaN values are ignored within each window.
 
     Returns
     -------
     filtered_trace: ndarray
     """
-    return percentile_filter(input, 50, size, dtype)
+    return percentile_filter(input, 50, size, dtype, skipna=skipna)
 
 
 def nanmedian_filter(
     input: np.ndarray, size: int, dtype: type | None = None
 ) -> np.array:
     """1D median filtering with nan values
+
+    .. deprecated::
+        Use :func:`median_filter` with ``skipna=True`` instead.
 
     Parameters
     ----------
