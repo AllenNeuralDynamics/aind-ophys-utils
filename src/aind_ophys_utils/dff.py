@@ -266,7 +266,7 @@ def plot_dff(
         ax[0].plot(t, F0trend, c="C3", label=r"$\mathrm{F}_{0,\mathrm{trend}}$")
     ax[0].plot(t, F0, c="#F0E442", label="F₀")
     ax[0].set_ylabel("F [a.u.]")
-    ax[0].legend(loc=1)
+    ax[0].legend(loc=1, frameon=False)
 
     # panel 1: fluctuations (full-baseline mode only)
     if has_fluctuations:
@@ -274,7 +274,7 @@ def plot_dff(
         ax[1].axhline(0, ls="--", c="k")
         ax[1].plot(t, F0 - F0trend, c="C5", label=r"$\mathrm{F}_{0,\mathrm{fluct}}$")
         ax[1].set_ylabel("ΔF [a.u.]")
-        ax[1].legend(loc=1)
+        ax[1].legend(loc=1, frameon=False)
 
     # dF/F panels: one per baseline when has_fluctuations, otherwise just F0
     dff_traces = (
@@ -305,7 +305,7 @@ def plot_dff(
         ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label, lw=0.5)
         ax[dff_row].axhline(0, ls="--", c="k")
         ax[dff_row].set_ylabel("ΔF/F [%]", y=1 if show_insets else 0.5)
-        ax[dff_row].legend(loc=1)
+        ax[dff_row].legend(loc=1, frameon=False)
         if show_insets:
             add_zoom_insets(
                 ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color
@@ -315,7 +315,5 @@ def plot_dff(
     ax[-1].set_xlabel("Time [s]")
     if roi_id is not None:
         ax[0].set_title(f"cell_roi_id: {int(roi_id)}")
-    plt.subplots_adjust(
-        hspace=0.1, top=0.935, bottom=0.13, left=0.06, right=0.995
-    )
+    plt.subplots_adjust(hspace=0.1, top=0.97)
     return fig
