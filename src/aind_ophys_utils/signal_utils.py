@@ -162,7 +162,9 @@ def fill_nan(input: np.ndarray) -> np.ndarray:
     return output
 
 
-def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
+def robust_std(
+    x: np.ndarray, axis: int = -1, skipna: bool = False
+) -> float | np.ndarray:
     """
     Compute the appropriately scaled median absolute deviation
     assuming normally distributed data. This is a robust statistic.
@@ -174,16 +176,22 @@ def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
     axis: int
         Axis along which the standard deviation is computed; the default is
         over the last axis (i.e. ``axis=-1``).
+    skipna: bool
+        If True, NaN values are ignored. If False (default), returns NaN
+        when any NaN is present.
 
     Returns
     -------
     std: float or ndarray
         A robust estimation of standard deviation.
     """
-    if np.any(np.isnan(x)) or x.size == 0:
+    if x.size == 0:
         return np.nan
-    mad = np.median(
-        np.abs(x - np.median(x, axis=axis, keepdims=True)), axis=axis
+    if not skipna and np.any(np.isnan(x)):
+        return np.nan
+    median_fn = np.nanmedian if skipna else np.median
+    mad = median_fn(
+        np.abs(x - median_fn(x, axis=axis, keepdims=True)), axis=axis
     )
     return 1.4826 * mad
 
@@ -330,7 +338,7 @@ def nanwelch(
     return f[0], np.array(Pxx)
 
 
-def noise_std(
+def noise_std(  # noqa: C901
     x: np.ndarray,
     method: str = "welch",
     max_num_samples: int = 3072,
@@ -374,7 +382,9 @@ def noise_std(
     device: str, default is 'cuda' if GPU is available.
         Device to use when using FFT method; 'cuda' or 'cpu'.
     skipna: bool
-        Exclude NaN values when computing the result.
+        Exclude NaN values when computing the result. For ``method='mad'``,
+        NaN frames are dropped after subtracting the median-filtered baseline.
+        For ``method='fft'``, NaN values are dropped before computing the FFT.
 
     Returns
     -------
@@ -384,16 +394,17 @@ def noise_std(
     if x.ndim > 1 and axis != -1:
         x = np.moveaxis(x, axis, -1)
     if method == "mad":
-        if skipna:
-            raise ValueError(  # pragma: no cover
-                "Excluding NaNs (skipna=True) isn't supported for method 'mad'"
-            )
         if x.ndim > 1:
             dims, T = x.shape[:-1], x.shape[-1]
             if n_jobs == 1:
                 return np.reshape(
                     [
-                        noise_std(y, method="mad", filter_length=filter_length)
+                        noise_std(
+                            y,
+                            method="mad",
+                            filter_length=filter_length,
+                            skipna=skipna,
+                        )
                         for y in x.reshape(-1, T)
                     ],
                     dims,
@@ -401,13 +412,21 @@ def noise_std(
             else:
                 res = ThreadPool(n_jobs).map(
                     lambda y: noise_std(
-                        y, method="mad", filter_length=filter_length
+                        y,
+                        method="mad",
+                        filter_length=filter_length,
+                        skipna=skipna,
                     ),
                     x.reshape(-1, T),
                 )
                 return np.reshape(res, dims).astype(x.dtype)
         else:
-            noise = x - median_filter(x, filter_length)
+            if not skipna and np.any(np.isnan(x)):
+                return np.nan
+            noise = x - median_filter(x, filter_length, skipna=skipna)
+            noise = noise[~np.isnan(noise)]
+            if noise.size == 0:
+                return np.nan
             # first pass removing positive outlier peaks
             filtered_noise_0 = noise[noise < (1.5 * np.abs(noise.min()))]
             rstd = robust_std(filtered_noise_0)
@@ -452,10 +471,19 @@ def noise_std(
             )
         else:
             if skipna:
-                raise ValueError(  # pragma: no cover
-                    "Excluding NaNs (skipna=True) is not yet supported "
-                    "for method 'fft'"
-                )
+                if x.ndim > 1:
+                    dims = x.shape[:-1]
+                    return np.reshape(
+                        [
+                            noise_std(row, method="fft", skipna=True)
+                            for row in x.reshape(-1, T)
+                        ],
+                        dims,
+                    )
+                x = x[~np.isnan(x)]
+                T = x.shape[-1]
+                if T == 0:
+                    return np.nan
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
             xdft = xdft[
