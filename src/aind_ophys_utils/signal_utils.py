@@ -338,7 +338,7 @@ def nanwelch(
     return f[0], np.array(Pxx)
 
 
-def noise_std(
+def noise_std(  # noqa: C901
     x: np.ndarray,
     method: str = "welch",
     max_num_samples: int = 3072,
@@ -425,6 +425,8 @@ def noise_std(
                 return np.nan
             noise = x - median_filter(x, filter_length, skipna=skipna)
             noise = noise[~np.isnan(noise)]
+            if noise.size == 0:
+                return np.nan
             # first pass removing positive outlier peaks
             filtered_noise_0 = noise[noise < (1.5 * np.abs(noise.min()))]
             rstd = robust_std(filtered_noise_0)
@@ -469,8 +471,19 @@ def noise_std(
             )
         else:
             if skipna:
-                x = x[~np.isnan(x)] if x.ndim == 1 else x
+                if x.ndim > 1:
+                    dims = x.shape[:-1]
+                    return np.reshape(
+                        [
+                            noise_std(row, method="fft", skipna=True)
+                            for row in x.reshape(-1, T)
+                        ],
+                        dims,
+                    )
+                x = x[~np.isnan(x)]
                 T = x.shape[-1]
+                if T == 0:
+                    return np.nan
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
             xdft = xdft[

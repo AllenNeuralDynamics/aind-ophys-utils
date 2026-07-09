@@ -210,3 +210,27 @@ def test_noise_std_skipna_methods(method):
     x_nan[3000:4000] = np.nan
     result = noise_std(x_nan, method=method, skipna=True)
     assert_allclose(result, 1.0, rtol=0.2, atol=0.2)
+
+
+@pytest.mark.parametrize("method", ["mad", "fft", "welch"])
+def test_noise_std_skipna_2d(method):
+    """noise_std with skipna=True works on 2D inputs for all methods."""
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal((5, 10000))
+    x_nan = x.copy()
+    x_nan[:, 3000:4000] = np.nan
+    result = noise_std(x_nan, method=method, skipna=True)
+    assert result.shape == (5,)
+    assert_allclose(result, np.ones(5), rtol=0.2, atol=0.2)
+
+
+def test_noise_std_mad_skipna_all_nan():
+    """noise_std method='mad' with all-NaN input returns NaN, not ValueError."""
+    x = np.full(100, np.nan)
+    assert np.isnan(noise_std(x, method="mad", skipna=True))
+
+
+def test_noise_std_fft_skipna_all_nan():
+    """noise_std method='fft' with all-NaN input returns NaN, not ValueError."""
+    x = np.full(100, np.nan)
+    assert np.isnan(noise_std(x, method="fft", skipna=True))
