@@ -145,6 +145,13 @@ def test_robust_std(x, expected, axis):
     assert_array_almost_equal(expected, robust_std(x, axis), 1)
 
 
+def test_robust_std_skipna():
+    """robust_std(skipna=True) ignores NaNs; skipna=False returns nan."""
+    x = np.array([-1.0, 2.0, 3.0, np.nan])
+    assert np.isnan(robust_std(x))
+    assert_array_almost_equal(robust_std(x, skipna=True), 1.4826, decimal=1)
+
+
 @pytest.mark.filterwarnings("ignore:nperseg*:UserWarning")
 @pytest.mark.parametrize(
     "x, expected, n_jobs, method",

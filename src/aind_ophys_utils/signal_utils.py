@@ -162,7 +162,9 @@ def fill_nan(input: np.ndarray) -> np.ndarray:
     return output
 
 
-def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
+def robust_std(
+    x: np.ndarray, axis: int = -1, skipna: bool = False
+) -> float | np.ndarray:
     """
     Compute the appropriately scaled median absolute deviation
     assuming normally distributed data. This is a robust statistic.
@@ -174,16 +176,22 @@ def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
     axis: int
         Axis along which the standard deviation is computed; the default is
         over the last axis (i.e. ``axis=-1``).
+    skipna: bool
+        If True, NaN values are ignored. If False (default), returns NaN
+        when any NaN is present.
 
     Returns
     -------
     std: float or ndarray
         A robust estimation of standard deviation.
     """
-    if np.any(np.isnan(x)) or x.size == 0:
+    if x.size == 0:
         return np.nan
-    mad = np.median(
-        np.abs(x - np.median(x, axis=axis, keepdims=True)), axis=axis
+    if not skipna and np.any(np.isnan(x)):
+        return np.nan
+    median_fn = np.nanmedian if skipna else np.median
+    mad = median_fn(
+        np.abs(x - median_fn(x, axis=axis, keepdims=True)), axis=axis
     )
     return 1.4826 * mad
 
