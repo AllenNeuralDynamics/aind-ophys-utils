@@ -258,32 +258,32 @@ def plot_dff(
         if has_fluctuations
         else (3 if show_insets else 2)
     )
-    fig, ax = plt.subplots(n_rows, 1, figsize=(15, n_rows * 1.2), sharex=True)
+    fig, ax = plt.subplots(n_rows, 1, figsize=(12, n_rows * 1.2), sharex=True)
 
     # panel 0: raw signal + baseline(s)
     ax[0].plot(t, F, label="$F$")
     if has_fluctuations:
-        ax[0].plot(t, F0trend, label="$F0_{trend}$")
-    ax[0].plot(t, F0, label="$F0$")
+        ax[0].plot(t, F0trend, label="$F_{0,trend}$")
+    ax[0].plot(t, F0, c="#F0E442", label="$F_0$")
     ax[0].set_ylabel("$F$ [a.u.]")
     ax[0].legend(loc=1)
 
     # panel 1: fluctuations (full-baseline mode only)
     if has_fluctuations:
-        ax[1].plot(t, F - F0trend, c="C1", label="$F-F0_{trend}$")
+        ax[1].plot(t, F - F0trend, c="C1", label="$F-F_{0,trend}$")
         ax[1].axhline(0, ls="--", c="k")
-        ax[1].plot(t, F0 - F0trend, c="C2", label="$F0_{fluctuations}$")
+        ax[1].plot(t, F0 - F0trend, c="C2", label="$F_{0,fluct}$")
         ax[1].set_ylabel("$\\Delta F$ [a.u.]")
         ax[1].legend(loc=1)
 
     # dF/F panels: one per baseline when has_fluctuations, otherwise just F0
     dff_traces = (
         [
-            (F / F0trend - 1, "C1", "$\\frac{\\Delta F_{trend}}{F0_{trend}}$"),
-            (F / F0 - 1, "C2", "$\\frac{\\Delta F}{F}$"),
+            (F / F0trend - 1, "C1", "$\\frac{\\Delta F}{F_{0,trend}}$"),
+            (F / F0 - 1, "C2", "$\\frac{\\Delta F}{F_0}$"),
         ]
         if has_fluctuations
-        else [(F / F0 - 1, "C1", "$\\frac{\\Delta F}{F0}$")]
+        else [(F / F0 - 1, "C1", "$\\frac{\\Delta F}{F_0}$")]
     )
     # row layout per trace: [spacer, dff_panel] when insets, else [dff_panel]
     first_dff_row = 2 if has_fluctuations else 1
