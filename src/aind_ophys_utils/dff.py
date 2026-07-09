@@ -258,7 +258,7 @@ def plot_dff(
         if has_fluctuations
         else (3 if show_insets else 2)
     )
-    fig, ax = plt.subplots(n_rows, 1, figsize=(12, n_rows * 1.2), sharex=True)
+    fig, ax = plt.subplots(n_rows, 1, figsize=(12, n_rows * 1.1), sharex=True)
 
     # panel 0: raw signal + baseline(s)
     ax[0].plot(t, F, label="F", lw=0.5)
@@ -328,7 +328,9 @@ def plot_dff(
     for i, (dff_trace, color, label) in enumerate(dff_traces):
         spacer_row = first_dff_row + i * (2 if show_insets else 1)
         dff_row = spacer_row + (1 if show_insets else 0)
-        ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label, lw=0.5, zorder=-1)
+        ax[dff_row].plot(
+            t, 100 * dff_trace, c=color, label=label, lw=0.5, zorder=-1
+        )
         ax[dff_row].axhline(0, ls="--", c="k")
         ax[dff_row].set_ylabel(
             r"$\Delta\mathrm{F}/\mathrm{F}$ [%]", y=1 if show_insets else 0.5
@@ -349,5 +351,5 @@ def plot_dff(
     ax[-1].set_xlabel("Time [s]")
     if roi_id is not None:
         ax[0].set_title(f"cell_roi_id: {int(roi_id)}")
-    plt.subplots_adjust(hspace=0.1, top=0.97)
+    plt.subplots_adjust(hspace=0.1, top=0.97, left=0.06, right=0.995)
     return fig
