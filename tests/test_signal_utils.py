@@ -98,6 +98,8 @@ def test_nanmedian_filter(input, size, expected):
     [
         # No NaNs: matches median_filter
         (np.arange(100.0), 5, median_filter(np.arange(100.0), 5)),
+        # size > len(input): scalar broadcast
+        (np.array([1.0, np.nan, 3.0]), 10, np.array([2.0, 2.0, 2.0])),
         # NaN block narrower than window: rolling fills the gap
         (
             np.array([1.0, 2.0, np.nan, 4.0, 5.0]),
