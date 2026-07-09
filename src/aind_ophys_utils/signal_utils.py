@@ -1,7 +1,7 @@
-""" Utils for signal processing """
+"""Utils for signal processing"""
 
+import warnings
 from multiprocessing.pool import Pool, ThreadPool
-
 
 import numpy as np
 import pandas as pd
@@ -51,14 +51,18 @@ def percentile_filter(
         fn = np.nanpercentile if skipna else np.percentile
         return (fn(input, percentile) * np.ones_like(input)).astype(dtype)
     if skipna:
-        padded = np.concatenate((input[:size // 2][::-1], input, input[:-size // 2 - 1:-1]))
+        padded = np.concatenate(
+            (input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])
+        )
         return (
             pd.Series(padded)
             .rolling(size, center=True, min_periods=1)
             .quantile(percentile / 100)
-            .to_numpy(dtype)[size // 2: -size // 2]
+            .to_numpy(dtype)[size // 2 : -size // 2]
         )
-    return scipy.ndimage.percentile_filter(input, percentile, size, output=dtype)
+    return scipy.ndimage.percentile_filter(
+        input, percentile, size, output=dtype
+    )
 
 
 def median_filter(
@@ -96,6 +100,7 @@ def nanmedian_filter(
 
     .. deprecated::
         Use :func:`median_filter` with ``skipna=True`` instead.
+        Will be removed in a future release.
 
     Parameters
     ----------
@@ -111,24 +116,29 @@ def nanmedian_filter(
     -------
     filtered_trace: ndarray
     """
+    warnings.warn(
+        "nanmedian_filter is deprecated; use median_filter(..., skipna=True) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     filtered_trace = (
         pd.Series(
             np.concatenate(
-                (input[: size // 2][::-1], input, input[: -size // 2 - 1: -1])
+                (input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])
             )
         )
         .rolling(size, center=True, min_periods=1)
         .median()
         .to_numpy(input.dtype if dtype is None else dtype)[
-            size // 2: -size // 2
+            size // 2 : -size // 2
         ]
     )
     if np.isnan(filtered_trace).any():
-        filtered_trace = _fill_nan(filtered_trace)
+        filtered_trace = fill_nan(filtered_trace)
     return filtered_trace
 
 
-def _fill_nan(input: np.ndarray) -> np.ndarray:
+def fill_nan(input: np.ndarray) -> np.ndarray:
     """Fill nan values in an array with interpolation
 
     Parameters
@@ -198,11 +208,11 @@ def _nanwelch_1d_array(
             (
                 data_1d[: max_num_samples // 3],
                 data_1d[
-                    int(T // 2 - max_num_samples / 6): int(
+                    int(T // 2 - max_num_samples / 6) : int(
                         T // 2 + max_num_samples / 6
                     )
                 ],
-                data_1d[-max_num_samples // 3:],
+                data_1d[-max_num_samples // 3 :],
             ),
         )
     if T < nperseg:  # return NaN if not enough non-NaN values
@@ -414,11 +424,11 @@ def noise_std(
                     x[..., : max_num_samples // 3],
                     x[
                         ...,
-                        int(T // 2 - max_num_samples / 6): int(
+                        int(T // 2 - max_num_samples / 6) : int(
                             T // 2 + max_num_samples / 6
                         ),
                     ],
-                    x[..., -max_num_samples // 3:],
+                    x[..., -max_num_samples // 3 :],
                 ),
                 axis=-1,
             )

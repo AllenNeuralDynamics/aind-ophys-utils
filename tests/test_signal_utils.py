@@ -1,4 +1,5 @@
 """Tests signal_utils"""
+
 from itertools import chain, product
 
 import numpy as np
@@ -6,6 +7,7 @@ import pytest
 from numpy.testing import assert_allclose, assert_array_almost_equal
 
 from aind_ophys_utils.signal_utils import (
+    fill_nan,
     median_filter,
     nanmedian_filter,
     noise_std,
@@ -86,8 +88,42 @@ def test_median(array, size, expected):
 )
 def test_nanmedian_filter(input, size, expected):
     """Test nanmedian_filter"""
-    output = nanmedian_filter(input, size)
+    with pytest.warns(DeprecationWarning):
+        output = nanmedian_filter(input, size)
     assert_array_almost_equal(expected, output)
+
+
+@pytest.mark.parametrize(
+    "array, size, expected",
+    [
+        # No NaNs: matches median_filter
+        (np.arange(100.0), 5, median_filter(np.arange(100.0), 5)),
+        # NaN block narrower than window: rolling fills the gap
+        (
+            np.array([1.0, 2.0, np.nan, 4.0, 5.0]),
+            3,
+            np.array([1.0, 1.5, 3.0, 4.5, 5.0]),
+        ),
+        # NaN block wider than window: NaNs remain (caller's responsibility to fill)
+        (
+            np.array([1.0, np.nan, np.nan, np.nan, np.nan, 5.0]),
+            3,
+            np.array([1.0, 1.0, np.nan, np.nan, 5.0, 5.0]),
+        ),
+    ],
+)
+def test_median_filter_skipna(array, size, expected):
+    """Test median_filter with skipna=True"""
+    output = median_filter(array, size, skipna=True)
+    np.testing.assert_allclose(output, expected, equal_nan=True)
+
+
+def test_fill_nan():
+    """Test fill_nan interpolates NaN values"""
+    arr = np.array([1.0, np.nan, np.nan, 4.0])
+    output = fill_nan(arr)
+    assert_array_almost_equal(output, [1.0, 2.0, 3.0, 4.0])
+    assert not np.isnan(output).any()
 
 
 @pytest.mark.parametrize(
@@ -101,7 +137,7 @@ def test_nanmedian_filter(input, size, expected):
         (np.array([1]), 0.0, -1),  # Unit
         (np.array([-1, 2, 3]), 1.4826, -1),  # Typical
         (np.random.randn(5, 10000), [1] * 5, -1),  # Typical
-        (np.random.randn(10000, 5), [1] * 5, 0),   # Typical
+        (np.random.randn(10000, 5), [1] * 5, 0),  # Typical
     ],
 )
 def test_robust_std(x, expected, axis):
@@ -126,7 +162,7 @@ def test_robust_std(x, expected, axis):
                             np.linspace(0, 100, 200000).reshape(20, 10000)
                         ),
                         [1] * 20,
-                        None
+                        None,
                     ],
                 ],
                 [["welch"], ["mad"], ["fft"]],
@@ -138,7 +174,8 @@ def test_noise_std(x, expected, method, n_jobs):
     """Test noise_std"""
     decimal = 0 if method == "fft" else 1
     assert_array_almost_equal(
-        expected, noise_std(x, method, n_jobs=n_jobs), decimal)
+        expected, noise_std(x, method, n_jobs=n_jobs), decimal
+    )
 
 
 @pytest.mark.parametrize(

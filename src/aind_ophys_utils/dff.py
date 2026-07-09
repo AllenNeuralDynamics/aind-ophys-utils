@@ -1,11 +1,12 @@
-""" Utils for computing dF/F """
+"""Utils for computing dF/F"""
+
 from functools import partial
 from multiprocessing.pool import Pool
-
 
 import numpy as np
 
 from aind_ophys_utils.signal_utils import (
+    fill_nan,
     median_filter,
     noise_std,
     percentile_filter,
@@ -149,6 +150,8 @@ def _dff_single_trace(
     negative_mask = F < (low_baseline - 3 * noise_sd)
     inactive_trace[active_mask + negative_mask] = np.nan
     baseline = median_filter(inactive_trace, long_filter_length, skipna=True)
+    if np.isnan(baseline).any():
+        baseline = fill_nan(baseline)
     # Calculate dF/F
     dff = (F - baseline) / np.maximum(baseline, noise_sd)
     return dff, baseline, noise_sd
@@ -188,8 +191,15 @@ def add_zoom_insets(ax_spacer, ax_dff, t, dff_trace, zoom_windows, color):
             inset_ax.set_xticks([])
             inset_ax.set_yticks([])
             mark_inset(
-                ax_dff, inset_ax, loc1=1, loc2=3,
-                fc="none", ec="#333333", alpha=0.8, linestyle="--", linewidth=1,
+                ax_dff,
+                inset_ax,
+                loc1=1,
+                loc2=3,
+                fc="none",
+                ec="#333333",
+                alpha=0.8,
+                linestyle="--",
+                linewidth=1,
             )
 
 
@@ -243,7 +253,11 @@ def plot_dff(
     show_insets = bool(zoom_duration) and zoom_duration > 0
 
     # layout: [raw, (fluctuations), (spacer), dff, ...] repeated for each dff trace
-    n_rows = (6 if show_insets else 4) if has_fluctuations else (3 if show_insets else 2)
+    n_rows = (
+        (6 if show_insets else 4)
+        if has_fluctuations
+        else (3 if show_insets else 2)
+    )
     fig, ax = plt.subplots(n_rows, 1, figsize=(15, n_rows * 1.2), sharex=True)
 
     # panel 0: raw signal + baseline(s)
@@ -264,8 +278,10 @@ def plot_dff(
 
     # dF/F panels: one per baseline when has_fluctuations, otherwise just F0
     dff_traces = (
-        [(F / F0trend - 1, "C1", "$\\frac{\\Delta F_{trend}}{F0_{trend}}$"),
-         (F / F0 - 1,      "C2", "$\\frac{\\Delta F}{F}$")]
+        [
+            (F / F0trend - 1, "C1", "$\\frac{\\Delta F_{trend}}{F0_{trend}}$"),
+            (F / F0 - 1, "C2", "$\\frac{\\Delta F}{F}$"),
+        ]
         if has_fluctuations
         else [(F / F0 - 1, "C1", "$\\frac{\\Delta F}{F0}$")]
     )
@@ -276,7 +292,10 @@ def plot_dff(
         t_total = t[-1] - t[0]
         zoom_windows = [
             (t[0], t[0] + zoom_duration),
-            (t[0] + (t_total - zoom_duration) / 2, t[0] + (t_total + zoom_duration) / 2),
+            (
+                t[0] + (t_total - zoom_duration) / 2,
+                t[0] + (t_total + zoom_duration) / 2,
+            ),
             (max(t[-1] - zoom_duration, t[0]), t[-1]),
         ]
 
@@ -288,11 +307,15 @@ def plot_dff(
         ax[dff_row].set_ylabel(r"$\Delta$F/F [%]")
         ax[dff_row].legend(loc=1)
         if show_insets:
-            add_zoom_insets(ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color)
+            add_zoom_insets(
+                ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color
+            )
 
     ax[-1].set_xlim(-0.01 * t[-1], 1.01 * t[-1])
     ax[-1].set_xlabel("Time [s]")
     if roi_id is not None:
         ax[0].set_title(f"cell_roi_id: {int(roi_id)}")
-    plt.subplots_adjust(hspace=0.1, top=0.935, bottom=0.13, left=0.06, right=0.995)
+    plt.subplots_adjust(
+        hspace=0.1, top=0.935, bottom=0.13, left=0.06, right=0.995
+    )
     return fig
