@@ -261,18 +261,18 @@ def plot_dff(
     fig, ax = plt.subplots(n_rows, 1, figsize=(12, n_rows * 1.2), sharex=True)
 
     # panel 0: raw signal + baseline(s)
-    ax[0].plot(t, F, label="$F$")
+    ax[0].plot(t, F, label="$F$", lw=0.5)
     if has_fluctuations:
-        ax[0].plot(t, F0trend, label="$F_{0,trend}$")
-    ax[0].plot(t, F0, c="#F0E442", label="$F_0$")
+        ax[0].plot(t, F0trend, label="$F_{0,trend}$", lw=0.5)
+    ax[0].plot(t, F0, c="#F0E442", label="$F_0$", lw=0.5)
     ax[0].set_ylabel("$F$ [a.u.]")
     ax[0].legend(loc=1)
 
     # panel 1: fluctuations (full-baseline mode only)
     if has_fluctuations:
-        ax[1].plot(t, F - F0trend, c="C1", label="$F-F_{0,trend}$")
+        ax[1].plot(t, F - F0trend, c="C1", label="$F-F_{0,trend}$", lw=0.5)
         ax[1].axhline(0, ls="--", c="k")
-        ax[1].plot(t, F0 - F0trend, c="C2", label="$F_{0,fluct}$")
+        ax[1].plot(t, F0 - F0trend, c="C2", label="$F_{0,fluct}$", lw=0.5)
         ax[1].set_ylabel("$\\Delta F$ [a.u.]")
         ax[1].legend(loc=1)
 
@@ -283,7 +283,7 @@ def plot_dff(
             (F / F0 - 1, "C2", "$\\frac{\\Delta F}{F_0}$"),
         ]
         if has_fluctuations
-        else [(F / F0 - 1, "C1", "$\\frac{\\Delta F}{F_0}$")]
+        else [(F / F0 - 1, "C2", "$\\frac{\\Delta F}{F_0}$")]
     )
     # row layout per trace: [spacer, dff_panel] when insets, else [dff_panel]
     first_dff_row = 2 if has_fluctuations else 1
@@ -302,9 +302,9 @@ def plot_dff(
     for i, (dff_trace, color, label) in enumerate(dff_traces):
         spacer_row = first_dff_row + i * (2 if show_insets else 1)
         dff_row = spacer_row + (1 if show_insets else 0)
-        ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label)
+        ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label, lw=0.5)
         ax[dff_row].axhline(0, ls="--", c="k")
-        ax[dff_row].set_ylabel(r"$\Delta$F/F [%]")
+        ax[dff_row].set_ylabel(r"$\Delta$F/F [%]", y=1 if show_insets else 0.5)
         ax[dff_row].legend(loc=1)
         if show_insets:
             add_zoom_insets(
