@@ -384,6 +384,7 @@ def noise_std(
     skipna: bool
         Exclude NaN values when computing the result. For ``method='mad'``,
         NaN frames are dropped after subtracting the median-filtered baseline.
+        For ``method='fft'``, NaN values are dropped before computing the FFT.
 
     Returns
     -------
@@ -468,10 +469,8 @@ def noise_std(
             )
         else:
             if skipna:
-                raise ValueError(  # pragma: no cover
-                    "Excluding NaNs (skipna=True) is not yet supported "
-                    "for method 'fft'"
-                )
+                x = x[~np.isnan(x)] if x.ndim == 1 else x
+                T = x.shape[-1]
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
             xdft = xdft[

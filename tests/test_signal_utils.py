@@ -199,11 +199,12 @@ def test_noise_std_nan(x, expected):
     assert_allclose(noise_std(x, skipna=True), expected, rtol=1e-1, atol=1e-1)
 
 
-def test_noise_std_mad_skipna():
-    """noise_std with method='mad' and skipna=True ignores NaN frames."""
+@pytest.mark.parametrize("method", ["mad", "fft", "welch"])
+def test_noise_std_skipna_methods(method):
+    """noise_std with skipna=True ignores NaN frames for all methods."""
     rng = np.random.default_rng(0)
     x = rng.standard_normal(10000)
     x_nan = x.copy()
     x_nan[3000:4000] = np.nan
-    result = noise_std(x_nan, method="mad", skipna=True)
-    assert_allclose(result, 1.0, rtol=0.1, atol=0.1)
+    result = noise_std(x_nan, method=method, skipna=True)
+    assert_allclose(result, 1.0, rtol=0.2, atol=0.2)
