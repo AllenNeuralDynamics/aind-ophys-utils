@@ -1,6 +1,6 @@
 """ Summary images for calcium imaging movie data """
 from multiprocessing.pool import ThreadPool
-from typing import Union
+
 
 import h5py
 import numpy as np
@@ -116,7 +116,7 @@ def local_correlations(
 
 
 def max_corr_image(
-    mov: Union[h5py.Dataset, np.ndarray],
+    mov: h5py.Dataset | np.ndarray,
     downscale: int = 10,
     bin_size: int = 50,
     eight_neighbours: bool = True,
@@ -130,7 +130,7 @@ def max_corr_image(
 
     Parameters
     ----------
-    mov: Union[h5py.Dataset, np.ndarray]
+    mov: h5py.Dataset | np.ndarray
         Input movie data.
     downscale: int
         Temporal downscale factor.
@@ -198,7 +198,7 @@ def max_corr_image(
 
 
 def pnr_image(
-    mov: Union[h5py.Dataset, np.ndarray],
+    mov: h5py.Dataset | np.ndarray,
     downscale: int = 10,
     method: str = "welch",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
@@ -208,7 +208,7 @@ def pnr_image(
 
     Parameters
     ----------
-    mov: Union[h5py.Dataset, np.ndarray]
+    mov: h5py.Dataset | np.ndarray
         Input movie data.
     downscale: int
         Temporal downscale factor.
@@ -241,7 +241,7 @@ def pnr_image(
 
 
 def max_image(
-    mov: Union[h5py.Dataset, np.ndarray],
+    mov: h5py.Dataset | np.ndarray,
     downscale: int = 1,
     batch_size: int = 500,
     skipna: bool = False,
@@ -252,7 +252,7 @@ def max_image(
 
     Parameters
     ----------
-    mov: Union[h5py.Dataset, np.ndarray]
+    mov: h5py.Dataset | np.ndarray
         Input movie data.
     downscale: int
         Temporal downscale factor.
@@ -275,7 +275,7 @@ def max_image(
 
 
 def mean_image(
-    mov: Union[h5py.Dataset, np.ndarray],
+    mov: h5py.Dataset | np.ndarray,
     batch_size: int = 500,
     skipna: bool = False,
 ) -> np.ndarray:
@@ -284,7 +284,7 @@ def mean_image(
 
     Parameters
     ----------
-    mov: Union[h5py.Dataset, np.ndarray]
+    mov: h5py.Dataset | np.ndarray
         Input movie data.
     batch_size: int
         Number of frames in each batch.
@@ -312,7 +312,7 @@ def mean_image(
 
 
 def var_image(
-    mov: Union[h5py.Dataset, np.ndarray],
+    mov: h5py.Dataset | np.ndarray,
     downscale: int = 1,
     batch_size: int = 500,
     skipna: bool = False,
@@ -323,7 +323,7 @@ def var_image(
 
     Parameters
     ----------
-    mov: Union[h5py.Dataset, np.ndarray]
+    mov: h5py.Dataset | np.ndarray
         Input movie data.
     downscale: int
         Temporal downscale factor.

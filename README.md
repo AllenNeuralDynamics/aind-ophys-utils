@@ -5,15 +5,45 @@
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 ![Interrogate](https://img.shields.io/badge/interrogate-100.0%25-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen?logo=codecov)
-![Python](https://img.shields.io/badge/python->=3.7-blue?logo=python)
+![Python](https://img.shields.io/badge/python->=3.10-blue?logo=python)
 
-This repository contains python utility methods for processing optical physiology data. Methods in this repository have simple, standard data interfaces and are generally applicable to optical physiology data. As much as possible think arrays and dataframes rather than complex project-specific data structures. 
+Python utility library for processing calcium imaging (optical physiology) data.
+All interfaces are array-based (NumPy / h5py) with no project-specific data
+structures, making the modules easy to integrate into any pipeline.
+
+## Modules
+
+| Module | Description |
+|---|---|
+| `baseline_fitting` | Robust parametric baseline fitting: M-estimator norms (Tukey biweight variants), IRLS nonlinear fitting with JAX autodiff, robust LOWESS smoother, and a high-level `fit_baseline` orchestrator that chains bleach-trend fitting with local fluctuation estimation. |
+| `dff` | ΔF/F computation from fluorescence traces. Inactive-frame masking baseline, parallelised across ROIs, with a `plot_dff` helper for QA visualisation. |
+| `signal_utils` | Signal processing primitives: running percentile filter, nanmedian filter, robust noise standard deviation (MAD / FFT / Welch), and a fast noise estimator using GPU-accelerated FFTs via PyTorch. |
+| `summary_images` | GPU-accelerated summary images for calcium imaging movies: mean, max-correlation (Cn), and peak-to-noise ratio (PNR). |
+| `array_utils` | Array downsampling and subsampling utilities with flexible strategies (mean, max, median, first, last, mid) and optional NaN-skipping. |
+| `video_utils` | H5 video downsampling and VP9 video encoding via imageio-ffmpeg. |
+| `motion_border_utils` | Compute motion borders from frame-shift correction outputs. |
 
 ## Installation
 
 ```bash
 pip install aind-ophys-utils
 ```
+
+> **GPU / CPU note.** `aind-ophys-utils` depends on [PyTorch](https://pytorch.org/),
+> which pulls in CUDA libraries by default from PyPI (~2 GB).  To install a
+> CPU-only build instead, install PyTorch first using the official CPU index, then
+> install this package:
+>
+> ```bash
+> pip install torch --index-url https://download.pytorch.org/whl/cpu
+> pip install aind-ophys-utils
+> ```
+>
+> Alternatively, pass `--extra-index-url` in a single command:
+>
+> ```bash
+> pip install aind-ophys-utils --extra-index-url https://download.pytorch.org/whl/cpu
+> ```
 
 To use the software from source, clone the repository and in the root directory run
 ```bash

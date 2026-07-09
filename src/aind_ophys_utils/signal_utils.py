@@ -1,11 +1,12 @@
-""" Utils for signal processing """
+"""Utils for signal processing"""
 
+import warnings
 from multiprocessing.pool import Pool, ThreadPool
-from typing import Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import scipy
+import scipy.ndimage
 import torch
 from scipy import signal
 
@@ -14,12 +15,15 @@ def percentile_filter(
     input: np.ndarray,
     percentile: float,
     size: int,
-    dtype: Optional[type] = None,
+    dtype: type | None = None,
+    skipna: bool = False,
 ) -> np.ndarray:
     """
-    Fast 1D running percentile filter using reflection
-    to extend the input array beyond its boundaries.
-    Uses pandas if input and filter size are long, scipy if short.
+    Fast 1D running percentile filter with reflect boundary handling.
+
+    Uses :func:`scipy.ndimage.percentile_filter` which has O(log n) complexity
+    since scipy 1.15.0. When ``skipna=True``, falls back to a pandas rolling
+    quantile which ignores NaN values within each window.
 
     Parameters
     ----------
@@ -29,9 +33,12 @@ def percentile_filter(
         The percentile parameter. Must be between 0 and 100 inclusive.
     size: int
         Length of the median filter to compute a rolling baseline.
-    dtype: Optional[type]
+    dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
+    skipna: bool
+        If True, NaN values are ignored within each window. If False (default),
+        NaNs propagate to the output.
 
     Returns
     -------
@@ -41,37 +48,31 @@ def percentile_filter(
     if dtype is None:
         dtype = input.dtype
     if size > len(input):
-        return (np.percentile(input, percentile) * np.ones_like(input)).astype(
-            dtype
+        fn = np.nanpercentile if skipna else np.percentile
+        return (fn(input, percentile) * np.ones_like(input)).astype(dtype)
+    if skipna:
+        padded = np.concatenate(
+            (input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])
         )
-    if size > 20 and len(input) > 200:
         return (
-            pd.Series(
-                np.concatenate(
-                    (
-                        input[: size // 2][::-1],
-                        input,
-                        input[: -size // 2 - 1: -1],
-                    )
-                )
-            )
-            .rolling(size, center=True)
+            pd.Series(padded)
+            .rolling(size, center=True, min_periods=1)
             .quantile(percentile / 100)
-            .to_numpy(dtype)[size // 2: -size // 2]
+            .to_numpy(dtype)[size // 2 : -size // 2]
         )
-    else:
-        return scipy.ndimage.percentile_filter(
-            input, percentile, size, output=dtype
-        )
+    return scipy.ndimage.percentile_filter(
+        input, percentile, size, output=dtype
+    )
 
 
 def median_filter(
-    input: np.ndarray, size: int, dtype: Optional[type] = None
+    input: np.ndarray,
+    size: int,
+    dtype: type | None = None,
+    skipna: bool = False,
 ) -> np.ndarray:
     """
-    Fast 1D median filtering using reflection to
-    extend the input array beyond its boundaries.
-    Uses pandas if input and filter size are long, scipy if short.
+    Fast 1D median filtering with reflect boundary handling.
 
     Parameters
     ----------
@@ -79,21 +80,27 @@ def median_filter(
         The input array.
     size: int
         Length of the median filter to compute a rolling baseline.
-    dtype: Optional[type]
+    dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
+    skipna: bool
+        If True, NaN values are ignored within each window.
 
     Returns
     -------
     filtered_trace: ndarray
     """
-    return percentile_filter(input, 50, size, dtype)
+    return percentile_filter(input, 50, size, dtype, skipna=skipna)
 
 
 def nanmedian_filter(
-    input: np.ndarray, size: int, dtype: Optional[type] = None
+    input: np.ndarray, size: int, dtype: type | None = None
 ) -> np.array:
     """1D median filtering with nan values
+
+    .. deprecated::
+        Use :func:`median_filter` with ``skipna=True`` instead.
+        Will be removed in a future release.
 
     Parameters
     ----------
@@ -109,24 +116,29 @@ def nanmedian_filter(
     -------
     filtered_trace: ndarray
     """
+    warnings.warn(
+        "nanmedian_filter is deprecated; use median_filter(..., skipna=True) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     filtered_trace = (
         pd.Series(
             np.concatenate(
-                (input[: size // 2][::-1], input, input[: -size // 2 - 1: -1])
+                (input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])
             )
         )
         .rolling(size, center=True, min_periods=1)
         .median()
         .to_numpy(input.dtype if dtype is None else dtype)[
-            size // 2: -size // 2
+            size // 2 : -size // 2
         ]
     )
     if np.isnan(filtered_trace).any():
-        filtered_trace = _fill_nan(filtered_trace)
+        filtered_trace = fill_nan(filtered_trace)
     return filtered_trace
 
 
-def _fill_nan(input: np.ndarray) -> np.ndarray:
+def fill_nan(input: np.ndarray) -> np.ndarray:
     """Fill nan values in an array with interpolation
 
     Parameters
@@ -150,7 +162,7 @@ def _fill_nan(input: np.ndarray) -> np.ndarray:
     return output
 
 
-def robust_std(x: np.ndarray, axis: int = -1) -> Union[float, np.ndarray]:
+def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
     """
     Compute the appropriately scaled median absolute deviation
     assuming normally distributed data. This is a robust statistic.
@@ -196,11 +208,11 @@ def _nanwelch_1d_array(
             (
                 data_1d[: max_num_samples // 3],
                 data_1d[
-                    int(T // 2 - max_num_samples / 6): int(
+                    int(T // 2 - max_num_samples / 6) : int(
                         T // 2 + max_num_samples / 6
                     )
                 ],
-                data_1d[-max_num_samples // 3:],
+                data_1d[-max_num_samples // 3 :],
             ),
         )
     if T < nperseg:  # return NaN if not enough non-NaN values
@@ -227,16 +239,16 @@ def _nanwelch_wrapper(args):
 def nanwelch(
     data: np.ndarray,
     fs: float = 1.0,
-    nperseg: Optional[int] = None,
-    noverlap: Optional[int] = None,
-    nfft: Optional[int] = None,
+    nperseg: int | None = None,
+    noverlap: int | None = None,
+    nfft: int | None = None,
     detrend: str = "constant",
     return_onesided: bool = True,
     scaling: str = "density",
     axis: int = -1,
     max_num_samples: int = 3072,
-    n_jobs: Optional[int] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
+    n_jobs: int | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Apply Welch's method to data of arbitrary dimensions, excluding NaNs.
 
@@ -263,7 +275,7 @@ def nanwelch(
         Axis along which the periodogram is computed.
     max_num_samples: int
         Number of samples used for computing the noise
-    n_jobs: Optional[int]
+    n_jobs: int | None
         The number of jobs to run in parallel.
 
     Returns
@@ -322,13 +334,13 @@ def noise_std(
     x: np.ndarray,
     method: str = "welch",
     max_num_samples: int = 3072,
-    noise_range: Tuple[float, float] = (0.25, 0.5),
+    noise_range: tuple[float, float] = (0.25, 0.5),
     filter_length: int = 31,
     axis: int = -1,
-    n_jobs: Optional[int] = None,
+    n_jobs: int | None = None,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     skipna: bool = False,
-) -> Union[float, np.ndarray]:
+) -> float | np.ndarray:
     """Estimate the standard deviation of the noise in input(s) `x`.
 
     Parameters
@@ -357,7 +369,7 @@ def noise_std(
     axis: int
         Axis along which the noise is computed.
         The default is over the last axis (i.e. ``axis=-1``).
-    n_jobs: Optional[int]
+    n_jobs: int | None
         The number of jobs to run in parallel.
     device: str, default is 'cuda' if GPU is available.
         Device to use when using FFT method; 'cuda' or 'cpu'.
@@ -412,11 +424,11 @@ def noise_std(
                     x[..., : max_num_samples // 3],
                     x[
                         ...,
-                        int(T // 2 - max_num_samples / 6): int(
+                        int(T // 2 - max_num_samples / 6) : int(
                             T // 2 + max_num_samples / 6
                         ),
                     ],
-                    x[..., -max_num_samples // 3:],
+                    x[..., -max_num_samples // 3 :],
                 ),
                 axis=-1,
             )
