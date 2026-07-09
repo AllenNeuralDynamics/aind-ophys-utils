@@ -328,7 +328,7 @@ def plot_dff(
     for i, (dff_trace, color, label) in enumerate(dff_traces):
         spacer_row = first_dff_row + i * (2 if show_insets else 1)
         dff_row = spacer_row + (1 if show_insets else 0)
-        ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label, lw=0.5)
+        ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label, lw=0.5, zorder=-1)
         ax[dff_row].axhline(0, ls="--", c="k")
         ax[dff_row].set_ylabel(
             r"$\Delta\mathrm{F}/\mathrm{F}$ [%]", y=1 if show_insets else 0.5
