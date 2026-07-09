@@ -382,7 +382,8 @@ def noise_std(
     device: str, default is 'cuda' if GPU is available.
         Device to use when using FFT method; 'cuda' or 'cpu'.
     skipna: bool
-        Exclude NaN values when computing the result.
+        Exclude NaN values when computing the result. For ``method='mad'``,
+        NaN frames are dropped after subtracting the median-filtered baseline.
 
     Returns
     -------
@@ -392,16 +393,17 @@ def noise_std(
     if x.ndim > 1 and axis != -1:
         x = np.moveaxis(x, axis, -1)
     if method == "mad":
-        if skipna:
-            raise ValueError(  # pragma: no cover
-                "Excluding NaNs (skipna=True) isn't supported for method 'mad'"
-            )
         if x.ndim > 1:
             dims, T = x.shape[:-1], x.shape[-1]
             if n_jobs == 1:
                 return np.reshape(
                     [
-                        noise_std(y, method="mad", filter_length=filter_length)
+                        noise_std(
+                            y,
+                            method="mad",
+                            filter_length=filter_length,
+                            skipna=skipna,
+                        )
                         for y in x.reshape(-1, T)
                     ],
                     dims,
@@ -409,13 +411,19 @@ def noise_std(
             else:
                 res = ThreadPool(n_jobs).map(
                     lambda y: noise_std(
-                        y, method="mad", filter_length=filter_length
+                        y,
+                        method="mad",
+                        filter_length=filter_length,
+                        skipna=skipna,
                     ),
                     x.reshape(-1, T),
                 )
                 return np.reshape(res, dims).astype(x.dtype)
         else:
-            noise = x - median_filter(x, filter_length)
+            if not skipna and np.any(np.isnan(x)):
+                return np.nan
+            noise = x - median_filter(x, filter_length, skipna=skipna)
+            noise = noise[~np.isnan(noise)]
             # first pass removing positive outlier peaks
             filtered_noise_0 = noise[noise < (1.5 * np.abs(noise.min()))]
             rstd = robust_std(filtered_noise_0)

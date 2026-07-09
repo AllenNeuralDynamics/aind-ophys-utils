@@ -197,3 +197,13 @@ def test_noise_std(x, expected, method, n_jobs):
 def test_noise_std_nan(x, expected):
     """Test noise_std with skipna=True"""
     assert_allclose(noise_std(x, skipna=True), expected, rtol=1e-1, atol=1e-1)
+
+
+def test_noise_std_mad_skipna():
+    """noise_std with method='mad' and skipna=True ignores NaN frames."""
+    rng = np.random.default_rng(0)
+    x = rng.standard_normal(10000)
+    x_nan = x.copy()
+    x_nan[3000:4000] = np.nan
+    result = noise_std(x_nan, method="mad", skipna=True)
+    assert_allclose(result, 1.0, rtol=0.1, atol=0.1)
