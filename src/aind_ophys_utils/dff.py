@@ -258,32 +258,58 @@ def plot_dff(
         if has_fluctuations
         else (3 if show_insets else 2)
     )
-    fig, ax = plt.subplots(n_rows, 1, figsize=(15, n_rows * 1.2), sharex=True)
+    fig, ax = plt.subplots(n_rows, 1, figsize=(12, n_rows * 1.1), sharex=True)
 
     # panel 0: raw signal + baseline(s)
-    ax[0].plot(t, F, label="$F$")
+    ax[0].plot(t, F, label="F", lw=0.5)
     if has_fluctuations:
-        ax[0].plot(t, F0trend, label="$F0_{trend}$")
-    ax[0].plot(t, F0, label="$F0$")
-    ax[0].set_ylabel("$F$ [a.u.]")
-    ax[0].legend(loc=1)
+        ax[0].plot(
+            t, F0trend, c="C3", label=r"$\mathrm{F}_{0,\mathrm{trend}}$"
+        )
+    ax[0].plot(t, F0, c="#F0E442", label=r"$\mathrm{F}_0$")
+    ax[0].set_ylabel("F [a.u.]")
+    legend = ax[0].legend(
+        loc="upper right",
+        ncol=3 if has_fluctuations else 2,
+        borderpad=0.05,
+        borderaxespad=0.3,
+    )
+    legend.get_frame().set_linewidth(0.0)
 
     # panel 1: fluctuations (full-baseline mode only)
     if has_fluctuations:
-        ax[1].plot(t, F - F0trend, c="C1", label="$F-F0_{trend}$")
+        ax[1].plot(
+            t,
+            F - F0trend,
+            c="C4",
+            label=r"$\mathrm{F} - \mathrm{F}_{0,\mathrm{trend}}$",
+            lw=0.5,
+        )
         ax[1].axhline(0, ls="--", c="k")
-        ax[1].plot(t, F0 - F0trend, c="C2", label="$F0_{fluctuations}$")
-        ax[1].set_ylabel("$\\Delta F$ [a.u.]")
-        ax[1].legend(loc=1)
+        ax[1].plot(
+            t, F0 - F0trend, c="C5", label=r"$\mathrm{F}_{0,\mathrm{fluct}}$"
+        )
+        ax[1].set_ylabel(r"$\Delta\mathrm{F}$ [a.u.]")
+        legend = ax[1].legend(
+            loc="upper right",
+            ncol=2,
+            borderpad=0.05,
+            borderaxespad=0.3,
+        )
+        legend.get_frame().set_linewidth(0.0)
 
     # dF/F panels: one per baseline when has_fluctuations, otherwise just F0
     dff_traces = (
         [
-            (F / F0trend - 1, "C1", "$\\frac{\\Delta F_{trend}}{F0_{trend}}$"),
-            (F / F0 - 1, "C2", "$\\frac{\\Delta F}{F}$"),
+            (
+                F / F0trend - 1,
+                "C1",
+                r"$\Delta\mathrm{F}/\mathrm{F}_{0,\mathrm{trend}}$",
+            ),
+            (F / F0 - 1, "C2", r"$\Delta\mathrm{F}/\mathrm{F}_0$"),
         ]
         if has_fluctuations
-        else [(F / F0 - 1, "C1", "$\\frac{\\Delta F}{F0}$")]
+        else [(F / F0 - 1, "C2", r"$\Delta\mathrm{F}/\mathrm{F}_0$")]
     )
     # row layout per trace: [spacer, dff_panel] when insets, else [dff_panel]
     first_dff_row = 2 if has_fluctuations else 1
@@ -302,10 +328,20 @@ def plot_dff(
     for i, (dff_trace, color, label) in enumerate(dff_traces):
         spacer_row = first_dff_row + i * (2 if show_insets else 1)
         dff_row = spacer_row + (1 if show_insets else 0)
-        ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label)
+        ax[dff_row].plot(
+            t, 100 * dff_trace, c=color, label=label, lw=0.5, zorder=-1
+        )
         ax[dff_row].axhline(0, ls="--", c="k")
-        ax[dff_row].set_ylabel(r"$\Delta$F/F [%]")
-        ax[dff_row].legend(loc=1)
+        ax[dff_row].set_ylabel(
+            r"$\Delta\mathrm{F}/\mathrm{F}$ [%]", y=1 if show_insets else 0.5
+        )
+        legend = ax[dff_row].legend(
+            loc="upper right",
+            ncol=1,
+            borderpad=0.05,
+            borderaxespad=0.3,
+        )
+        legend.get_frame().set_linewidth(0.0)
         if show_insets:
             add_zoom_insets(
                 ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color
@@ -315,7 +351,5 @@ def plot_dff(
     ax[-1].set_xlabel("Time [s]")
     if roi_id is not None:
         ax[0].set_title(f"cell_roi_id: {int(roi_id)}")
-    plt.subplots_adjust(
-        hspace=0.1, top=0.935, bottom=0.13, left=0.06, right=0.995
-    )
+    plt.subplots_adjust(hspace=0.1, top=0.97, left=0.06, right=0.995)
     return fig

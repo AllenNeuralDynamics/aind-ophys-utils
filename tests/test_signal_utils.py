@@ -128,6 +128,14 @@ def test_fill_nan():
     assert not np.isnan(output).any()
 
 
+def test_fill_nan_all_nan():
+    """fill_nan returns a copy unchanged when all values are NaN."""
+    arr = np.full(5, np.nan)
+    output = fill_nan(arr)
+    assert np.all(np.isnan(output))
+    assert output is not arr
+
+
 @pytest.mark.parametrize(
     "x, expected, axis",
     [

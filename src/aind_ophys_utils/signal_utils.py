@@ -152,8 +152,10 @@ def fill_nan(input: np.ndarray) -> np.ndarray:
         Copied input array with filled nan values.
     """
     nan_mask = np.isnan(input)
-    nan_indices = np.where(nan_mask)[0]
     no_nan_indices = np.where(~nan_mask)[0]
+    if no_nan_indices.size == 0:
+        return input.copy()
+    nan_indices = np.where(nan_mask)[0]
     interpolated_values = np.interp(
         nan_indices, no_nan_indices, input[no_nan_indices]
     )
@@ -475,7 +477,14 @@ def noise_std(  # noqa: C901
                     dims = x.shape[:-1]
                     return np.reshape(
                         [
-                            noise_std(row, method="fft", skipna=True)
+                            noise_std(
+                                row,
+                                method="fft",
+                                max_num_samples=max_num_samples,
+                                noise_range=noise_range,
+                                device=device,
+                                skipna=True,
+                            )
                             for row in x.reshape(-1, T)
                         ],
                         dims,
