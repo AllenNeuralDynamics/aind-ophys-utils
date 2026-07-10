@@ -109,12 +109,11 @@ The table below, from [semantic release](https://github.com/semantic-release/sem
 | `perf(pencil): remove graphiteWidth option`<br><br>`BREAKING CHANGE: The graphiteWidth option has been removed.`<br>`The default graphite width of 10mm is always used for performance reasons.` | ~~Major~~ Breaking Release <br /> (Note that the `BREAKING CHANGE: ` token must be in the footer of the commit) |
 
 ### Documentation
-To generate the rst files source files for documentation, run
+To build and preview the documentation locally, run
 ```bash
-sphinx-apidoc -o doc_template/source/ src 
+mkdocs serve
 ```
-Then to create the documentation HTML files, run
+To build static HTML:
 ```bash
-sphinx-build -b html doc_template/source/ doc_template/build/html
+mkdocs build
 ```
-More info on sphinx installation can be found [here](https://www.sphinx-doc.org/en/master/usage/installation.html).

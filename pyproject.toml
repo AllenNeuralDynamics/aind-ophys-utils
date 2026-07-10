@@ -32,9 +32,10 @@ dependencies = [
 dev = [
     'coverage',
     'interrogate',
+    'mkdocs',
+    'mkdocs-material',
+    'mkdocstrings[python]',
     'ruff',
-    'Sphinx',
-    'furo',
     'pytest'
 ]
 
