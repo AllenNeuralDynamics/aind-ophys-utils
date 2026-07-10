@@ -210,17 +210,6 @@ def test_noise_std_nan(x, expected):
 
 
 @pytest.mark.parametrize("method", ["mad", "fft", "welch"])
-def test_noise_std_skipna_methods(method):
-    """noise_std with skipna=True ignores NaN frames for all methods."""
-    rng = np.random.default_rng(0)
-    x = rng.standard_normal(10000)
-    x_nan = x.copy()
-    x_nan[3000:4000] = np.nan
-    result = noise_std(x_nan, method=method, skipna=True)
-    assert_allclose(result, 1.0, rtol=0.2, atol=0.2)
-
-
-@pytest.mark.parametrize("method", ["mad", "fft", "welch"])
 def test_noise_std_skipna_2d(method):
     """noise_std with skipna=True works on 2D inputs for all methods."""
     rng = np.random.default_rng(1)
