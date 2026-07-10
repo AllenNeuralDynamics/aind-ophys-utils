@@ -5,7 +5,6 @@ from functools import partial
 from itertools import product
 from multiprocessing.pool import Pool, ThreadPool
 
-
 import h5py
 import numpy as np
 from skimage.measure import block_reduce

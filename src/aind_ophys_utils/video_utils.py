@@ -1,7 +1,6 @@
 """ Utils for video generation """
 from pathlib import Path
 
-
 import h5py
 import imageio_ffmpeg as mpg
 import numpy as np

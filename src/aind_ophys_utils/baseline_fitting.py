@@ -11,11 +11,12 @@ from typing import Callable, Literal
 import jax
 import jax.numpy as jnp
 import numpy as np
-from aind_ophys_utils.signal_utils import percentile_filter
-from scipy.optimize import brentq, OptimizeResult, minimize
+from scipy.optimize import OptimizeResult, brentq, minimize
 from statsmodels.nonparametric._smoothers_lowess import lowess as _sm_lowess
 from statsmodels.robust import scale
 from statsmodels.robust.norms import RobustNorm
+
+from aind_ophys_utils.signal_utils import percentile_filter
 
 jax.config.update("jax_enable_x64", True)
 

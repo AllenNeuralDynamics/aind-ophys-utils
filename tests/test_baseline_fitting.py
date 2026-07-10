@@ -21,7 +21,6 @@ from aind_ophys_utils.baseline_fitting import (  # noqa: E402
     sum_of_exps,
 )
 
-
 RNG = np.random.default_rng(42)
 
 
