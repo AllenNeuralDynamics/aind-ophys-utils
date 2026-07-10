@@ -51,6 +51,8 @@ def percentile_filter(
         fn = np.nanpercentile if skipna else np.percentile
         return (fn(input, percentile) * np.ones_like(input)).astype(dtype)
     if skipna:
+        if size == 1:
+            return input.copy().astype(dtype)
         padded = np.concatenate((input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1]))
         return (
             pd.Series(padded)
@@ -89,7 +91,7 @@ def median_filter(
     return percentile_filter(input, 50, size, dtype, skipna=skipna)
 
 
-def nanmedian_filter(input: np.ndarray, size: int, dtype: type | None = None) -> np.array:
+def nanmedian_filter(input: np.ndarray, size: int, dtype: type | None = None) -> np.ndarray:
     """1D median filtering with nan values
 
     .. deprecated::

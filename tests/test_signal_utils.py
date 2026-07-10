@@ -112,6 +112,8 @@ def test_nanmedian_filter(input, size, expected):
             3,
             np.array([1.0, 1.0, np.nan, np.nan, 5.0, 5.0]),
         ),
+        # size == 1: returns copy of input unchanged
+        (np.array([1.0, np.nan, 3.0]), 1, np.array([1.0, np.nan, 3.0])),
     ],
 )
 def test_median_filter_skipna(array, size, expected):
@@ -226,6 +228,15 @@ def test_noise_std_skipna_2d(method):
     x_nan = x.copy()
     x_nan[:, 3000:4000] = np.nan
     result = noise_std(x_nan, method=method, skipna=True)
+    assert result.shape == (5,)
+    assert_allclose(result, np.ones(5), rtol=0.2, atol=0.2)
+
+
+def test_noise_std_axis():
+    """noise_std with axis=0 on 2D input triggers np.moveaxis."""
+    rng = np.random.default_rng(42)
+    x = rng.standard_normal((10000, 5))
+    result = noise_std(x, axis=0)
     assert result.shape == (5,)
     assert_allclose(result, np.ones(5), rtol=0.2, atol=0.2)
 

@@ -80,7 +80,7 @@ def local_correlations(
     rho[:, 1:] += rho_w
 
     if eight_neighbours:
-        rho_d1 = mean(torch.multiply(w_mov[:, 1:, :-1], w_mov[:, :-1, 1:]), axis=0)
+        rho_d1 = mean(torch.multiply(w_mov[:, 1:, :-1], w_mov[:, :-1, 1:]), dim=0)
         rho_d2 = mean(
             torch.multiply(
                 w_mov[:, :-1, :-1],
@@ -90,7 +90,7 @@ def local_correlations(
                     1:,
                 ],
             ),
-            axis=0,
+            dim=0,
         )
 
         rho[1:, :-1] += rho_d1

@@ -101,6 +101,6 @@ def test_encode_video(raw_video_fixture, tmp_path):
     fps = raw_video_fixture["fps"]
     expected_video = raw_video_fixture["raw_video"]
 
-    (vu.encode_video(video=expected_video, output_path=output_path.as_posix(), fps=fps),)
+    vu.encode_video(video=expected_video, output_path=output_path.as_posix(), fps=fps)
 
     compare_videos(output_path, expected_video)
