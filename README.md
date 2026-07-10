@@ -1,7 +1,7 @@
 # Welcome to aind-ophys-utils
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-![Code Style](https://img.shields.io/badge/code%20style-black-black)
+![Code Style](https://img.shields.io/badge/code%20style-ruff-261230?logo=ruff)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
 ![Interrogate](https://img.shields.io/badge/interrogate-100.0%25-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen?logo=codecov)
@@ -74,19 +74,10 @@ coverage run -m pytest && coverage report
 interrogate .
 ```
 
-- Use **flake8** to check that code is up to standards (no unused imports, etc.):
+- Use **ruff** to format and lint the code:
 ```bash
-flake8 .
-```
-
-- Use **black** to automatically format the code into PEP standards:
-```bash
-black .
-```
-
-- Use **isort** to automatically sort import statements:
-```bash
-isort .
+ruff format .
+ruff check .
 ```
 
 ### Pull requests
