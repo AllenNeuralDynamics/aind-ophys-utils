@@ -237,7 +237,7 @@ def pnr_image(
     """
     if downscale > 1:
         mov = downsample_array(mov, factors=downscale, skipna=skipna)
-    noise = noise_std(mov, method, dim=0, device=device, skipna=skipna)
+    noise = noise_std(mov, method, axis=0, device=device, skipna=skipna)
     if skipna:
         return (np.nanmax(mov, 0) - np.nanmedian(mov, 0)) / noise
     return (np.max(mov, 0) - np.median(mov, 0)) / noise
