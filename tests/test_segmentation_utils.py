@@ -1,4 +1,4 @@
-""" Tests for aind_ophys_utils.segmentation_utils """
+"""Tests for aind_ophys_utils.segmentation_utils"""
 
 import numpy as np
 import pytest

@@ -94,8 +94,6 @@ def test_dff_wide_nan_block():
     """dff handles a NaN block wider than the filter window via fill_nan."""
     T = 500
     F = np.ones(T) * 100.0
-    F[200:300] = (
-        np.nan
-    )  # 100-sample NaN block, wider than typical short window
+    F[200:300] = np.nan  # 100-sample NaN block, wider than typical short window
     dF, F0, ns = dff(F, fs=10.0, long_window=5, short_window=1)
     assert not np.isnan(F0).any()  # baseline must be fully interpolated

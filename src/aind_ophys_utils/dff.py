@@ -136,16 +136,12 @@ def _dff_single_trace(
     if invalid:
         return F, F, np.nan
     if isinstance(noise_method, str):
-        noise_sd = noise_std(
-            F, noise_method, filter_length=short_filter_length, device="cpu"
-        )
+        noise_sd = noise_std(F, noise_method, filter_length=short_filter_length, device="cpu")
     else:
         noise_sd = noise_method
     # Create trace using inactive frames only, by replacing outliers with nan
     inactive_trace = F.copy()
-    low_baseline = percentile_filter(
-        F, inactive_percentile, long_filter_length
-    )
+    low_baseline = percentile_filter(F, inactive_percentile, long_filter_length)
     active_mask = F > (low_baseline + 3 * noise_sd)
     negative_mask = F < (low_baseline - 3 * noise_sd)
     inactive_trace[active_mask + negative_mask] = np.nan
@@ -253,19 +249,13 @@ def plot_dff(
     show_insets = bool(zoom_duration) and zoom_duration > 0
 
     # layout: [raw, (fluctuations), (spacer), dff, ...] repeated for each dff trace
-    n_rows = (
-        (6 if show_insets else 4)
-        if has_fluctuations
-        else (3 if show_insets else 2)
-    )
+    n_rows = (6 if show_insets else 4) if has_fluctuations else (3 if show_insets else 2)
     fig, ax = plt.subplots(n_rows, 1, figsize=(12, n_rows * 1.1), sharex=True)
 
     # panel 0: raw signal + baseline(s)
     ax[0].plot(t, F, label="F", lw=0.5)
     if has_fluctuations:
-        ax[0].plot(
-            t, F0trend, c="C3", label=r"$\mathrm{F}_{0,\mathrm{trend}}$"
-        )
+        ax[0].plot(t, F0trend, c="C3", label=r"$\mathrm{F}_{0,\mathrm{trend}}$")
     ax[0].plot(t, F0, c="#F0E442", label=r"$\mathrm{F}_0$")
     ax[0].set_ylabel("F [a.u.]")
     legend = ax[0].legend(
@@ -286,9 +276,7 @@ def plot_dff(
             lw=0.5,
         )
         ax[1].axhline(0, ls="--", c="k")
-        ax[1].plot(
-            t, F0 - F0trend, c="C5", label=r"$\mathrm{F}_{0,\mathrm{fluct}}$"
-        )
+        ax[1].plot(t, F0 - F0trend, c="C5", label=r"$\mathrm{F}_{0,\mathrm{fluct}}$")
         ax[1].set_ylabel(r"$\Delta\mathrm{F}$ [a.u.]")
         legend = ax[1].legend(
             loc="upper right",
@@ -328,13 +316,9 @@ def plot_dff(
     for i, (dff_trace, color, label) in enumerate(dff_traces):
         spacer_row = first_dff_row + i * (2 if show_insets else 1)
         dff_row = spacer_row + (1 if show_insets else 0)
-        ax[dff_row].plot(
-            t, 100 * dff_trace, c=color, label=label, lw=0.5, zorder=-1
-        )
+        ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label, lw=0.5, zorder=-1)
         ax[dff_row].axhline(0, ls="--", c="k")
-        ax[dff_row].set_ylabel(
-            r"$\Delta\mathrm{F}/\mathrm{F}$ [%]", y=1 if show_insets else 0.5
-        )
+        ax[dff_row].set_ylabel(r"$\Delta\mathrm{F}/\mathrm{F}$ [%]", y=1 if show_insets else 0.5)
         legend = ax[dff_row].legend(
             loc="upper right",
             ncol=1,
@@ -343,9 +327,7 @@ def plot_dff(
         )
         legend.get_frame().set_linewidth(0.0)
         if show_insets:
-            add_zoom_insets(
-                ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color
-            )
+            add_zoom_insets(ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color)
 
     ax[-1].set_xlim(-0.01 * t[-1], 1.01 * t[-1])
     ax[-1].set_xlabel("Time [s]")

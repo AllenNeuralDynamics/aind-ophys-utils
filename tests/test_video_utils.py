@@ -1,4 +1,5 @@
 """Tests video_utils"""
+
 import h5py
 import imageio_ffmpeg as mpg
 import numpy as np
@@ -30,17 +31,13 @@ import aind_ophys_utils.video_utils as vu
         ),
     ],
 )
-def test_video_downsample(
-    array, input_fps, output_fps, strategy, expected, tmp_path
-):
+def test_video_downsample(array, input_fps, output_fps, strategy, expected, tmp_path):
     """Test downsample_h5_video"""
     video_file = tmp_path / "sample_video_file.h5"
     with h5py.File(video_file, "w") as h5f:
         h5f.create_dataset("data", data=array)
 
-    downsampled_video = vu.downsample_h5_video(
-        video_file, input_fps, output_fps, strategy
-    )
+    downsampled_video = vu.downsample_h5_video(video_file, input_fps, output_fps, strategy)
 
     assert np.array_equal(downsampled_video, expected)
 
@@ -48,9 +45,7 @@ def test_video_downsample(
 def compare_videos(encoded_video_path: str, expected_video: np.ndarray):
     """Compare an encoded video with its original source"""
 
-    reader = mpg.read_frames(
-        encoded_video_path, pix_fmt="gray8", bits_per_pixel=8
-    )
+    reader = mpg.read_frames(encoded_video_path, pix_fmt="gray8", bits_per_pixel=8)
     meta = reader.__next__()
     obt_nframes = int(np.round(meta["duration"] * meta["fps"]))
 
@@ -79,10 +74,7 @@ def raw_video_fixture(request):
 
     rng = np.random.default_rng(rng_seed)
 
-    raw_video = [
-        rng.integers(0, 256, size=video_shape, dtype="uint8")
-        for _ in range(nframes)
-    ]
+    raw_video = [rng.integers(0, 256, size=video_shape, dtype="uint8") for _ in range(nframes)]
 
     result = {}
     result["raw_video"] = np.array(raw_video)
@@ -109,8 +101,6 @@ def test_encode_video(raw_video_fixture, tmp_path):
     fps = raw_video_fixture["fps"]
     expected_video = raw_video_fixture["raw_video"]
 
-    vu.encode_video(
-        video=expected_video, output_path=output_path.as_posix(), fps=fps
-    ),
+    (vu.encode_video(video=expected_video, output_path=output_path.as_posix(), fps=fps),)
 
     compare_videos(output_path, expected_video)

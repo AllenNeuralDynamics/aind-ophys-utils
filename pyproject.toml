@@ -49,7 +49,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-ignore = ["E203"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/aind_ophys_utils/signal_utils.py" = ["C901"]

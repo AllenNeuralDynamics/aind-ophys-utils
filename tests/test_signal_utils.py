@@ -190,9 +190,7 @@ def test_robust_std_skipna():
 def test_noise_std(x, expected, method, n_jobs):
     """Test noise_std"""
     decimal = 0 if method == "fft" else 1
-    assert_array_almost_equal(
-        expected, noise_std(x, method, n_jobs=n_jobs), decimal
-    )
+    assert_array_almost_equal(expected, noise_std(x, method, n_jobs=n_jobs), decimal)
 
 
 @pytest.mark.parametrize(

@@ -51,18 +51,14 @@ def percentile_filter(
         fn = np.nanpercentile if skipna else np.percentile
         return (fn(input, percentile) * np.ones_like(input)).astype(dtype)
     if skipna:
-        padded = np.concatenate(
-            (input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])
-        )
+        padded = np.concatenate((input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1]))
         return (
             pd.Series(padded)
             .rolling(size, center=True, min_periods=1)
             .quantile(percentile / 100)
             .to_numpy(dtype)[size // 2 : -size // 2]
         )
-    return scipy.ndimage.percentile_filter(
-        input, percentile, size, output=dtype
-    )
+    return scipy.ndimage.percentile_filter(input, percentile, size, output=dtype)
 
 
 def median_filter(
@@ -93,9 +89,7 @@ def median_filter(
     return percentile_filter(input, 50, size, dtype, skipna=skipna)
 
 
-def nanmedian_filter(
-    input: np.ndarray, size: int, dtype: type | None = None
-) -> np.array:
+def nanmedian_filter(input: np.ndarray, size: int, dtype: type | None = None) -> np.array:
     """1D median filtering with nan values
 
     .. deprecated::
@@ -122,16 +116,10 @@ def nanmedian_filter(
         stacklevel=2,
     )
     filtered_trace = (
-        pd.Series(
-            np.concatenate(
-                (input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])
-            )
-        )
+        pd.Series(np.concatenate((input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])))
         .rolling(size, center=True, min_periods=1)
         .median()
-        .to_numpy(input.dtype if dtype is None else dtype)[
-            size // 2 : -size // 2
-        ]
+        .to_numpy(input.dtype if dtype is None else dtype)[size // 2 : -size // 2]
     )
     if np.isnan(filtered_trace).any():
         filtered_trace = fill_nan(filtered_trace)
@@ -156,17 +144,13 @@ def fill_nan(input: np.ndarray) -> np.ndarray:
     if no_nan_indices.size == 0:
         return input.copy()
     nan_indices = np.where(nan_mask)[0]
-    interpolated_values = np.interp(
-        nan_indices, no_nan_indices, input[no_nan_indices]
-    )
+    interpolated_values = np.interp(nan_indices, no_nan_indices, input[no_nan_indices])
     output = input.copy()
     output[nan_mask] = interpolated_values
     return output
 
 
-def robust_std(
-    x: np.ndarray, axis: int = -1, skipna: bool = False
-) -> float | np.ndarray:
+def robust_std(x: np.ndarray, axis: int = -1, skipna: bool = False) -> float | np.ndarray:
     """
     Compute the appropriately scaled median absolute deviation
     assuming normally distributed data. This is a robust statistic.
@@ -192,9 +176,7 @@ def robust_std(
     if not skipna and np.any(np.isnan(x)):
         return np.nan
     median_fn = np.nanmedian if skipna else np.median
-    mad = median_fn(
-        np.abs(x - median_fn(x, axis=axis, keepdims=True)), axis=axis
-    )
+    mad = median_fn(np.abs(x - median_fn(x, axis=axis, keepdims=True)), axis=axis)
     return 1.4826 * mad
 
 
@@ -217,11 +199,7 @@ def _nanwelch_1d_array(
         data_1d = np.concatenate(
             (
                 data_1d[: max_num_samples // 3],
-                data_1d[
-                    int(T // 2 - max_num_samples / 6) : int(
-                        T // 2 + max_num_samples / 6
-                    )
-                ],
+                data_1d[int(T // 2 - max_num_samples / 6) : int(T // 2 + max_num_samples / 6)],
                 data_1d[-max_num_samples // 3 :],
             ),
         )
@@ -433,9 +411,7 @@ def noise_std(  # noqa: C901
             filtered_noise_0 = noise[noise < (1.5 * np.abs(noise.min()))]
             rstd = robust_std(filtered_noise_0)
             # second pass removing remaining pos and neg peak outliers
-            filtered_noise_1 = filtered_noise_0[
-                abs(filtered_noise_0) < (2.5 * rstd)
-            ]
+            filtered_noise_1 = filtered_noise_0[abs(filtered_noise_0) < (2.5 * rstd)]
             return robust_std(filtered_noise_1)
     else:
         T = x.shape[-1]
@@ -445,9 +421,7 @@ def noise_std(  # noqa: C901
                     x[..., : max_num_samples // 3],
                     x[
                         ...,
-                        int(T // 2 - max_num_samples / 6) : int(
-                            T // 2 + max_num_samples / 6
-                        ),
+                        int(T // 2 - max_num_samples / 6) : int(T // 2 + max_num_samples / 6),
                     ],
                     x[..., -max_num_samples // 3 :],
                 ),
@@ -465,12 +439,7 @@ def noise_std(  # noqa: C901
                 res = ThreadPool(n_jobs).map(signal.welch, x)
                 ff = res[0][0]
                 psd = np.array([r[1] for r in res])
-            psd = (
-                torch.tensor(
-                    psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]
-                )
-                / 2
-            )
+            psd = torch.tensor(psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
         else:
             if skipna:
                 if x.ndim > 1:
@@ -495,9 +464,7 @@ def noise_std(  # noqa: C901
                     return np.nan
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
-            xdft = xdft[
-                ..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))
-            ]
+            xdft = xdft[..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))]
             psd = abs(xdft) ** 2 / T
         noise = torch.sqrt(torch.mean(psd, -1)).cpu()
         return noise.item() if noise.dim() == 0 else noise.numpy()

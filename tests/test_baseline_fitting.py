@@ -2,6 +2,7 @@
 
 Run with:  pytest tests/test_baseline_fitting.py -v
 """
+
 import matplotlib
 
 matplotlib.use("Agg")  # headless backend — must be set before pyplot import.
@@ -27,6 +28,7 @@ RNG = np.random.default_rng(42)
 # ---------------------------------------------------------------------------
 # 1. sum_of_exps — single_exp, double_exp, and bright cases
 # ---------------------------------------------------------------------------
+
 
 class TestSumOfExps:
     """Exercise sum_of_exps for all three classic cases."""
@@ -101,6 +103,7 @@ class TestSumOfExps:
     def test_jax_backend(self):
         """sum_of_exps traces correctly with xp=jnp."""
         import jax.numpy as jnp
+
         t = np.linspace(0, 100, 50)
         params = np.array([10.0, 5.0, 50.0])
         y = sum_of_exps(params, jnp.asarray(t), xp=jnp)
@@ -111,6 +114,7 @@ class TestSumOfExps:
 # ---------------------------------------------------------------------------
 # 2. Tukey-biweight norms — exercise the rho/psi/weights branches
 # ---------------------------------------------------------------------------
+
 
 class TestNorms:
     """Cover ATB validation + psi/weights/psi_deriv + OneSided / Tukey subclasses."""
@@ -150,6 +154,7 @@ class TestNorms:
 # 3. nonlinear_fit — numpy backend (OLS + robust IRLS)
 # ---------------------------------------------------------------------------
 
+
 def _decay_trace(noise_sd=0.5, T=400):
     """Synthesise a single-exp decay trace at uniform 1 Hz sampling."""
     t = np.arange(T, dtype=float)
@@ -175,7 +180,12 @@ class TestNonlinearFitNumpy:
         w = np.ones_like(y)
         x0 = np.array([1.0, 1.0, 50.0])
         _, res = nonlinear_fit(
-            y, t, sum_of_exps, x0, backend="numpy", weights=w,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="numpy",
+            weights=w,
         )
         assert res.success or res.status >= 0
 
@@ -185,7 +195,13 @@ class TestNonlinearFitNumpy:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
         fitted, res = nonlinear_fit(
-            y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.3,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="numpy",
+            M=M,
+            fixed_sigma=0.3,
         )
         assert fitted.shape == y.shape
         assert np.allclose(res.x, true, atol=2.0)
@@ -194,6 +210,7 @@ class TestNonlinearFitNumpy:
 # ---------------------------------------------------------------------------
 # 4. nonlinear_fit — JAX backend smoke test so the public API stays covered.
 # ---------------------------------------------------------------------------
+
 
 class TestNonlinearFitJax:
     """nonlinear_fit on the JAX backend, with an M-estimator."""
@@ -204,8 +221,14 @@ class TestNonlinearFitJax:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
         fitted, res = nonlinear_fit(
-            y, t, sum_of_exps, x0,
-            backend="jax", M=M, fixed_sigma=0.3, dtype=jnp.float64,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="jax",
+            M=M,
+            fixed_sigma=0.3,
+            dtype=jnp.float64,
         )
         assert fitted.shape == y.shape
         assert np.allclose(res.x, true, atol=2.0)
@@ -214,6 +237,7 @@ class TestNonlinearFitJax:
 # ---------------------------------------------------------------------------
 # 5. fit_baseline — round-2 sigma relaxation path
 # ---------------------------------------------------------------------------
+
 
 class TestFitBaselineRound2:
     """Trigger the round-2 sigma relaxation logic in fit_baseline."""
@@ -224,8 +248,13 @@ class TestFitBaselineRound2:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=2.0, c_neg=3.0)
         _, F0trend, res, _ = fit_baseline(
-            y, t, sum_of_exps, x0,
-            backend="jax", M=M, fixed_sigma=0.3,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="jax",
+            M=M,
+            fixed_sigma=0.3,
             sigma_relax_threshold=0.99,  # forces round 2
         )
         assert F0trend.shape == y.shape
@@ -237,8 +266,13 @@ class TestFitBaselineRound2:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
         _, F0trend, res, _ = fit_baseline(
-            y, t, sum_of_exps, x0,
-            backend="numpy", M=M, fixed_sigma=0.3,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="numpy",
+            M=M,
+            fixed_sigma=0.3,
             sigma_relax_threshold=0.0,  # never triggers round 2
         )
         assert res.round == 1
@@ -252,12 +286,13 @@ class TestFitBaselineRound2:
 # noise CV ~9% (median), activity fraction up to ~0.58, and trends that both
 # decay and rise (median bleach negative). The fixtures below are calibrated to
 # those numbers so the ground-truth tests stay representative of real data.
-_DECAY_PARAMS = (5.0, 10.0, 30.0)     # b_inf, b, tau  → falls 15 → 5
+_DECAY_PARAMS = (5.0, 10.0, 30.0)  # b_inf, b, tau  → falls 15 → 5
 _RISING_PARAMS = (15.0, -10.0, 30.0)  # negative amplitude → anti-bleach, rises 5 → 15
 
 
-def _high_activity_trace(activity_frac, amp, noise_cv=0.09, T=400, seed=7,
-                         true_params=_DECAY_PARAMS):
+def _high_activity_trace(
+    activity_frac, amp, noise_cv=0.09, T=400, seed=7, true_params=_DECAY_PARAMS
+):
     """Baseline + one-sided (positive) activity transients + realistic noise.
 
     The noise scale is set from ``noise_cv`` times the mean baseline level
@@ -292,8 +327,14 @@ class TestNonlinearFitSigmaAnneal:
     def _fit(self, y, t, steps, sigma):
         """Trend fit at the given anneal-step count; returns the fitted curve."""
         fitted, _ = nonlinear_fit(
-            y, t, sum_of_exps, self.X0, self.BOUNDS,
-            M=self.M, fixed_sigma=sigma, sigma_anneal_steps=steps,
+            y,
+            t,
+            sum_of_exps,
+            self.X0,
+            self.BOUNDS,
+            M=self.M,
+            fixed_sigma=sigma,
+            sigma_anneal_steps=steps,
         )
         return fitted
 
@@ -301,32 +342,35 @@ class TestNonlinearFitSigmaAnneal:
     # (~58%) — collapses the single jump; rising (anti-bleach, 5→15) at the real
     # p90 activity (~50%) is mild enough that both succeed, so there annealing
     # only has to match, not beat, the jump.
-    @pytest.mark.parametrize("params, act, jump_collapses", [
-        (_DECAY_PARAMS, 0.60, True),
-        (_RISING_PARAMS, 0.50, False),
-    ])
+    @pytest.mark.parametrize(
+        "params, act, jump_collapses",
+        [
+            (_DECAY_PARAMS, 0.60, True),
+            (_RISING_PARAMS, 0.50, False),
+        ],
+    )
     def test_annealing_recovers_baseline(self, params, act, jump_collapses):
         """Annealing recovers the truth and is never worse than the single jump."""
         y, t, base, sd = _high_activity_trace(act, amp=8.0, true_params=params)
         rmse = lambda f: float(np.sqrt(np.mean((f - base) ** 2)))  # noqa: E731
         r_anneal = rmse(self._fit(y, t, 4, sd))
         r_jump = rmse(self._fit(y, t, 1, sd))
-        assert r_anneal < sd                          # annealing recovers the truth
+        assert r_anneal < sd  # annealing recovers the truth
         # never worse than the jump, tolerant of optimizer/BLAS jitter (~1e-9)
         assert r_anneal <= r_jump + 1e-6 * sd + 1e-9
         if jump_collapses:
-            assert r_jump > sd                        # single jump lands in bad basin
+            assert r_jump > sd  # single jump lands in bad basin
 
     def test_easy_regime_unaffected_by_anneal_steps(self):
         """Sparse activity: annealing and single-jump converge to the same fit."""
         y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
-        assert np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 4, sd),
-                           atol=1e-4 * sd + 1e-6)
+        assert np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 4, sd), atol=1e-4 * sd + 1e-6)
 
 
 # ---------------------------------------------------------------------------
 # 6. robust_lowess — both with and without M
 # ---------------------------------------------------------------------------
+
 
 class TestRobustLowess:
     """Cover robust_lowess M=None and M=ATB paths."""
@@ -348,7 +392,11 @@ class TestRobustLowess:
         y = np.sin(t / 30.0) + RNG.normal(0, 0.1, size=T)
         M = AsymmetricTukeyBiweight()
         fluctuation, w, sigma = robust_lowess(
-            y, t, frac=0.1, M=M, maxiter=3,
+            y,
+            t,
+            frac=0.1,
+            M=M,
+            maxiter=3,
         )
         assert fluctuation.shape == (T,)
         assert sigma is not None and sigma > 0
@@ -360,7 +408,12 @@ class TestRobustLowess:
         y = np.sin(t / 30.0) + RNG.normal(0, 0.1, size=T)
         M = AsymmetricTukeyBiweight()
         _, _, sigma = robust_lowess(
-            y, t, frac=0.1, M=M, maxiter=2, fixed_sigma=0.2,
+            y,
+            t,
+            frac=0.1,
+            M=M,
+            maxiter=2,
+            fixed_sigma=0.2,
         )
         assert sigma == 0.2
 
@@ -368,6 +421,7 @@ class TestRobustLowess:
 # ---------------------------------------------------------------------------
 # 7. fit_baseline_fluctuations — ratio + subtract + percentile branches
 # ---------------------------------------------------------------------------
+
 
 class TestFitBaselineFluctuations:
     """Cover the dispatch matrix of fit_baseline_fluctuations."""
@@ -383,7 +437,11 @@ class TestFitBaselineFluctuations:
         """method=lowess + mode=ratio → fluctuation is dimensionless and >0."""
         trace, t, trend = self._trace_and_trend()
         baseline, fluctuation, info = fit_baseline_fluctuations(
-            trace, t, trend=trend, mode="ratio", method="lowess",
+            trace,
+            t,
+            trend=trend,
+            mode="ratio",
+            method="lowess",
         )
         assert baseline.shape == trace.shape
         assert "lowess_weights" in info
@@ -392,7 +450,11 @@ class TestFitBaselineFluctuations:
         """method=lowess + mode=subtract → fluctuation is additive."""
         trace, t, trend = self._trace_and_trend()
         baseline, fluctuation, info = fit_baseline_fluctuations(
-            trace, t, trend=trend, mode="subtract", method="lowess",
+            trace,
+            t,
+            trend=trend,
+            mode="subtract",
+            method="lowess",
         )
         assert baseline.shape == trace.shape
 
@@ -400,7 +462,10 @@ class TestFitBaselineFluctuations:
         """trend=None branch → baseline == fluctuation."""
         trace, t, _ = self._trace_and_trend()
         baseline, fluctuation, _ = fit_baseline_fluctuations(
-            trace, t, trend=None, method="lowess",
+            trace,
+            t,
+            trend=None,
+            method="lowess",
         )
         assert np.allclose(baseline, fluctuation)
 
@@ -408,7 +473,12 @@ class TestFitBaselineFluctuations:
         """method=percentile path is exercised."""
         trace, t, trend = self._trace_and_trend()
         baseline, _, info = fit_baseline_fluctuations(
-            trace, t, trend=trend, mode="subtract", method="percentile", window=40.0,
+            trace,
+            t,
+            trend=trend,
+            mode="subtract",
+            method="percentile",
+            window=40.0,
         )
         assert "percentile" in info and "size" in info
 
@@ -417,13 +487,17 @@ class TestFitBaselineFluctuations:
         trace, t, trend = self._trace_and_trend()
         with pytest.raises(ValueError, match="Unknown method"):
             fit_baseline_fluctuations(
-                trace, t, trend=trend, method="totally_invalid",
+                trace,
+                t,
+                trend=trend,
+                method="totally_invalid",
             )
 
 
 # ---------------------------------------------------------------------------
 # 8. fit_baseline — the high-level orchestrator
 # ---------------------------------------------------------------------------
+
 
 class TestFitBaseline:
     """Cover the fit_baseline orchestrator and its M_fluctuations defaulting."""
@@ -433,7 +507,11 @@ class TestFitBaseline:
         y, t, _ = _decay_trace(noise_sd=0.5, T=300)
         x0 = np.array([1.0, 1.0, 50.0])
         F0, F0trend, res, info = fit_baseline(
-            y, t, sum_of_exps, x0, backend="numpy",
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="numpy",
         )
         assert F0.shape == y.shape
         assert F0trend.shape == y.shape
@@ -445,7 +523,13 @@ class TestFitBaseline:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         F0, F0trend, res, info = fit_baseline(
-            y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.5,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="numpy",
+            M=M,
+            fixed_sigma=0.5,
         )
         assert F0.shape == y.shape
 
@@ -453,6 +537,7 @@ class TestFitBaseline:
 # ---------------------------------------------------------------------------
 # 9. nonlinear_fit — model-without-return_jac path
 # ---------------------------------------------------------------------------
+
 
 def _sum_of_exps_no_jac(params, t):
     """Wrapper around sum_of_exps that exposes no ``return_jac`` parameter.
@@ -479,8 +564,13 @@ class TestNonlinearFitNoJacobianModel:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         fitted, res = nonlinear_fit(
-            y, t, _sum_of_exps_no_jac, x0,
-            backend="numpy", M=M, fixed_sigma=0.3,
+            y,
+            t,
+            _sum_of_exps_no_jac,
+            x0,
+            backend="numpy",
+            M=M,
+            fixed_sigma=0.3,
         )
         assert fitted.shape == y.shape
 
@@ -488,6 +578,7 @@ class TestNonlinearFitNoJacobianModel:
 # ---------------------------------------------------------------------------
 # 10. nonlinear_fit IRLS — sigma estimation paths when fixed_sigma is None
 # ---------------------------------------------------------------------------
+
 
 class TestNonlinearFitMadSigma:
     """Cover the per-iteration MAD/std sigma estimation branches in _run_irls."""
@@ -498,7 +589,13 @@ class TestNonlinearFitMadSigma:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         fitted, res = nonlinear_fit(
-            y, t, sum_of_exps, x0, backend="numpy", M=M, maxiter=2,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="numpy",
+            M=M,
+            maxiter=2,
         )
         assert fitted.shape == y.shape
 
@@ -508,8 +605,14 @@ class TestNonlinearFitMadSigma:
         x0 = np.array([1.0, 1.0, 50.0])
         M = AsymmetricTukeyBiweight()
         fitted, res = nonlinear_fit(
-            y, t, sum_of_exps, x0,
-            backend="jax", M=M, maxiter=2, dtype=jnp.float64,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="jax",
+            M=M,
+            maxiter=2,
+            dtype=jnp.float64,
         )
         assert fitted.shape == y.shape
 
@@ -528,7 +631,13 @@ class TestNonlinearFitMadSigma:
         M = AsymmetricTukeyBiweight()
         # The fit will probably fail or return NaN at sigma=0, but the code path executes.
         fitted, res = nonlinear_fit(
-            y, t, sum_of_exps, x0, backend="numpy", M=M, maxiter=1,
+            y,
+            t,
+            sum_of_exps,
+            x0,
+            backend="numpy",
+            M=M,
+            maxiter=1,
         )
         assert fitted.shape == y.shape
 
@@ -536,6 +645,7 @@ class TestNonlinearFitMadSigma:
 # ---------------------------------------------------------------------------
 # 11. robust_lowess — convergence break and sigma=0 fallback
 # ---------------------------------------------------------------------------
+
 
 class TestRobustLowessEdgeCases:
     """Cover the remaining robust_lowess branches."""
