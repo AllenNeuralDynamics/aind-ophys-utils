@@ -278,12 +278,7 @@ def plot_dff(
         ax[1].axhline(0, ls="--", c="k")
         ax[1].plot(t, F0 - F0trend, c="C5", label=r"$\mathrm{F}_{0,\mathrm{fluct}}$")
         ax[1].set_ylabel(r"$\Delta\mathrm{F}$ [a.u.]")
-        legend = ax[1].legend(
-            loc="upper right",
-            ncol=2,
-            borderpad=0.05,
-            borderaxespad=0.3,
-        )
+        legend = ax[1].legend(loc="upper right", ncol=2, borderpad=0.05, borderaxespad=0.3)
         legend.get_frame().set_linewidth(0.0)
 
     # dF/F panels: one per baseline when has_fluctuations, otherwise just F0
@@ -319,12 +314,7 @@ def plot_dff(
         ax[dff_row].plot(t, 100 * dff_trace, c=color, label=label, lw=0.5, zorder=-1)
         ax[dff_row].axhline(0, ls="--", c="k")
         ax[dff_row].set_ylabel(r"$\Delta\mathrm{F}/\mathrm{F}$ [%]", y=1 if show_insets else 0.5)
-        legend = ax[dff_row].legend(
-            loc="upper right",
-            ncol=1,
-            borderpad=0.05,
-            borderaxespad=0.3,
-        )
+        legend = ax[dff_row].legend(loc="upper right", ncol=1, borderpad=0.05, borderaxespad=0.3)
         legend.get_frame().set_linewidth(0.0)
         if show_insets:
             add_zoom_insets(ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color)

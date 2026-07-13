@@ -81,17 +81,7 @@ def local_correlations(
 
     if eight_neighbours:
         rho_d1 = mean(torch.multiply(w_mov[:, 1:, :-1], w_mov[:, :-1, 1:]), dim=0)
-        rho_d2 = mean(
-            torch.multiply(
-                w_mov[:, :-1, :-1],
-                w_mov[
-                    :,
-                    1:,
-                    1:,
-                ],
-            ),
-            dim=0,
-        )
+        rho_d2 = mean(torch.multiply(w_mov[:, :-1, :-1], w_mov[:, 1:, 1:]), dim=0)
 
         rho[1:, :-1] += rho_d1
         rho[:-1, 1:] += rho_d1
@@ -344,11 +334,7 @@ def var_image(
             _nan_sum(mov, f, batch_size) for f in (np.square, lambda x: x, lambda x: ~np.isnan(x))
         )
         return sum_of_squares / not_nans - (sum / not_nans) ** 2
-    d = _downsample_array(
-        mov,
-        fun=lambda x, axis: np.mean(x**2, axis),
-        factors=(batch_size, 1, 1),
-    )
+    d = _downsample_array(mov, fun=lambda x, axis: np.mean(x**2, axis), factors=(batch_size, 1, 1))
     w = np.ones(d.shape[0])
     smaller_last_batch = mov.shape[0] % batch_size
     if smaller_last_batch:

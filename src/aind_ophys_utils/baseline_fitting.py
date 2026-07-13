@@ -447,14 +447,7 @@ def nonlinear_fit(  # noqa: C901
     # ----------------------------
     fun_or_pair = make_objective()
     fun, jac_ = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
-    res = minimize(
-        fun,
-        x,
-        bounds=bounds,
-        method=optimizer,
-        jac=jac_,
-        options=optimizer_options,
-    )
+    res = minimize(fun, x, bounds=bounds, method=optimizer, jac=jac_, options=optimizer_options)
     x = jnp.asarray(res.x, dtype=dtype) if use_jax else res.x
 
     # ----------------------------
@@ -500,14 +493,7 @@ def nonlinear_fit(  # noqa: C901
 
         fun_or_pair = make_objective(_sigma)
         fun, jac_ = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
-        res = minimize(
-            fun,
-            x,
-            bounds=bounds,
-            method=optimizer,
-            jac=jac_,
-            options=optimizer_options,
-        )
+        res = minimize(fun, x, bounds=bounds, method=optimizer, jac=jac_, options=optimizer_options)
 
         x_new = jnp.asarray(res.x, dtype=dtype) if use_jax else res.x
         at_target = fixed_sigma is None or float(_sigma) <= fixed_sigma * (1 + 1e-9)
@@ -585,15 +571,8 @@ def robust_lowess(
     delta = 0.01 * (t[-1] - t[0])
 
     for _ in range(max(1, maxiter) if M is not None else 1):
-        fluctuation = _sm_lowess(
-            y,
-            t,
-            t,
-            resid_weights=w_current,
-            frac=frac,
-            it=0,
-            delta=delta,
-        )[0][:, 1]
+        fluctuation = _sm_lowess(y, t, t, resid_weights=w_current, frac=frac, it=0, delta=delta)
+        fluctuation = fluctuation[0][:, 1]
 
         if M is None:
             sigma = None
@@ -883,9 +862,7 @@ def fit_baseline(
         M_np = M.with_xp(np) if backend == "jax" else M
         if float(min(M_np.weights(2), M_np.weights(-2))) < 0.5:
             _z_half = brentq(
-                lambda z: float(min(M_np.weights(z), M_np.weights(-z))) - 0.5,
-                0.0,
-                2.0,
+                lambda z: float(min(M_np.weights(z), M_np.weights(-z))) - 0.5, 0.0, 2.0
             )
             _relax_sigma = fixed_sigma * 2.0 / _z_half
 
