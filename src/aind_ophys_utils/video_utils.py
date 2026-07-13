@@ -1,6 +1,6 @@
-""" Utils for video generation """
-from pathlib import Path
+"""Utils for video generation"""
 
+from pathlib import Path
 
 import h5py
 import imageio_ffmpeg as mpg
@@ -37,9 +37,7 @@ def downsample_h5_video(
             array downsampled along axis=0
     """
     with h5py.File(video_path, "r") as h5f:
-        video_out = downsample_array(
-            h5f["data"], input_fps, output_fps, strategy=strategy
-        )
+        video_out = downsample_array(h5f["data"], input_fps, output_fps, strategy=strategy)
     return video_out
 
 

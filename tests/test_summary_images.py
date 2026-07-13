@@ -1,4 +1,5 @@
 """Tests summary_images"""
+
 from itertools import product
 
 import numpy as np
@@ -14,12 +15,16 @@ from aind_ophys_utils import summary_images as si
         (np.arange(90).reshape(10, 3, 3), np.ones((3, 3)), False),
         (np.ones((10, 3, 3)), np.zeros((3, 3)), False),
         (np.nan * np.zeros((10, 3, 3)), np.nan * np.zeros((3, 3)), False),
-        (np.concatenate([np.arange(90).reshape(10, 3, 3),
-                         np.nan * np.zeros((10, 3, 3))]),
-         np.nan * np.ones((3, 3)), False),
-        (np.concatenate([np.arange(90).reshape(10, 3, 3),
-                         np.nan * np.zeros((10, 3, 3))]),
-         np.ones((3, 3)), True),
+        (
+            np.concatenate([np.arange(90).reshape(10, 3, 3), np.nan * np.zeros((10, 3, 3))]),
+            np.nan * np.ones((3, 3)),
+            False,
+        ),
+        (
+            np.concatenate([np.arange(90).reshape(10, 3, 3), np.nan * np.zeros((10, 3, 3))]),
+            np.ones((3, 3)),
+            True,
+        ),
     ],
 )
 def test_local_correlations(array, expected, skipna):
@@ -35,8 +40,11 @@ def test_local_correlations(array, expected, skipna):
 def test_max_corr_image(ds, bs, eight, skipna):
     """Test max_corr_image"""
     output = si.max_corr_image(
-        np.arange(270).reshape(30, 3, 3), downscale=ds, bin_size=bs,
-        eight_neighbours=eight, skipna=skipna
+        np.arange(270).reshape(30, 3, 3),
+        downscale=ds,
+        bin_size=bs,
+        eight_neighbours=eight,
+        skipna=skipna,
     )
     expected = np.ones((3, 3))
     assert_array_almost_equal(expected, output)
@@ -45,22 +53,15 @@ def test_max_corr_image(ds, bs, eight, skipna):
 @pytest.mark.filterwarnings("ignore:nperseg*:UserWarning")
 @pytest.mark.parametrize(
     "ds, method, skipna",
-    list(product([1, 10, 100], ["welch", "mad", "fft"], [False])) +
-    list(product([1, 10], ["welch"], [True])),
+    list(product([1, 10, 100], ["welch", "mad", "fft"], [False]))
+    + list(product([1, 10], ["welch"], [True])),
 )
 def test_pnr_image(ds, method, skipna):
     """Test pnr_image"""
-    output = si.pnr_image(
-        np.random.randn(10000, 3, 3),
-        downscale=ds,
-        method=method,
-        skipna=skipna
-    )
+    output = si.pnr_image(np.random.randn(10000, 3, 3), downscale=ds, method=method, skipna=skipna)
     expected = {1: 7.7, 10: 6.5, 100: 5.2}[ds]
     decimal = -1 if method == "fft" else 0
-    assert_array_almost_equal(
-        np.ones((3, 3)), output / expected, decimal=decimal
-    )
+    assert_array_almost_equal(np.ones((3, 3)), output / expected, decimal=decimal)
 
 
 @pytest.mark.parametrize(
@@ -69,10 +70,10 @@ def test_pnr_image(ds, method, skipna):
 )
 def test_max_image(ds, bs, skipna):
     """Test max_image"""
-    data = np.arange(180.).reshape(20, 3, 3)
+    data = np.arange(180.0).reshape(20, 3, 3)
     data[-1, 0, 0] = np.nan
     output = si.max_image(data, downscale=ds, batch_size=bs, skipna=skipna)
-    expected = {1: 171., 2: 166.5, 5: 153.}[ds] + np.arange(9).reshape(3, 3)
+    expected = {1: 171.0, 2: 166.5, 5: 153.0}[ds] + np.arange(9).reshape(3, 3)
     expected[0, 0] = {1: 162, 2: 162, 5: 148.5}[ds] if skipna else np.nan
     assert_array_almost_equal(expected, output)
 
@@ -83,7 +84,7 @@ def test_max_image(ds, bs, skipna):
 )
 def test_mean_image(bs, skipna):
     """Test mean_image"""
-    data = np.arange(180.).reshape(20, 3, 3)
+    data = np.arange(180.0).reshape(20, 3, 3)
     data[0, 0, 0] = np.nan
     output = si.mean_image(data, batch_size=bs, skipna=skipna)
     expected = np.nanmean(data, 0) if skipna else data.mean(0)
@@ -96,7 +97,7 @@ def test_mean_image(bs, skipna):
 )
 def test_var_image(ds, bs, skipna):
     """Test var_image"""
-    data = np.arange(180.).reshape(20, 3, 3)
+    data = np.arange(180.0).reshape(20, 3, 3)
     data[0, 0, 0] = np.nan
     output = si.var_image(data, downscale=ds, batch_size=bs, skipna=skipna)
     expected = {1: 2693.25, 2: 2673, 5: 2531.25}[ds] * np.ones((3, 3))
@@ -107,7 +108,7 @@ def test_var_image(ds, bs, skipna):
 @pytest.mark.parametrize("bs", [2, 7, 10, 100])
 def test_nan_sum(bs):
     """Test var_image"""
-    mov = np.arange(180.).reshape(20, 3, 3)
+    mov = np.arange(180.0).reshape(20, 3, 3)
     mov[0, 0, 0] = np.nan
     output = si._nan_sum(mov, lambda x: x, bs)
     expected = np.nansum(mov, 0)

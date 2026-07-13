@@ -1,19 +1,22 @@
-""" Utils to manipulate arrays """
+"""Utils to manipulate arrays"""
 
+import multiprocessing
 import warnings
 from functools import partial
 from itertools import product
-from multiprocessing.pool import Pool, ThreadPool
-
+from multiprocessing.pool import ThreadPool
 
 import h5py
 import numpy as np
 from skimage.measure import block_reduce
 
+_mp_ctx = multiprocessing.get_context(
+    "fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn"
+)
+Pool = _mp_ctx.Pool
 
-def n_frames_from_hz(
-    input_frame_rate: float, downsampled_frame_rate: float
-) -> int:
+
+def n_frames_from_hz(input_frame_rate: float, downsampled_frame_rate: float) -> int:
     """
     Find the number of frames to group together to downsample
     a video from input_frame_rate to downsampled_frame_rate
@@ -38,28 +41,21 @@ def n_frames_from_hz(
     return max(1, frames_to_group)
 
 
-def _downsample_group(
-    i, h5py_name, h5py_key, factors, fun, dtype=None, cval=np.nan
-):
+def _downsample_group(i, h5py_name, h5py_key, factors, fun, dtype=None, cval=np.nan):
     """Auxiliary function to compute group max/mean/medians in parallel"""
-    array = h5py.File(h5py_name)[h5py_key]
-    T = array.shape[0]
-    if fun != _nanmid:
-        factors = (min(factors[0], T - i),) + factors[1:]
+    with h5py.File(h5py_name, "r") as h5f:
+        dataset = h5f[h5py_key]
+        T = dataset.shape[0]
+        if fun != _nanmid:
+            factors = (min(factors[0], T - i),) + factors[1:]
+        chunk = dataset[i : i + factors[0]][...]  # read into numpy before closing
     if all(f == 1 for f in factors[1:]):
-        out = fun(array[i: i + factors[0]], 0)
+        out = fun(chunk, 0)
     else:
         nan_type = (
-            np.float32
-            if np.issubdtype(tmp := array.dtype, np.integer) and np.isnan(cval)
-            else tmp
+            np.float32 if np.issubdtype(tmp := chunk.dtype, np.integer) and np.isnan(cval) else tmp
         )
-        out = block_reduce(
-            array[i: i + factors[0]].astype(nan_type),
-            factors,
-            fun,
-            cval,
-        )[0]
+        out = block_reduce(chunk.astype(nan_type), factors, fun, cval)[0]
     return out if dtype is None else out.astype(dtype)
 
 
@@ -68,23 +64,18 @@ def _i0(s, f):
     return 0 if s == "first" else (f - 1 if s == "last" else f // 2)
 
 
-def _subsample_group(
-    i, h5py_name, h5py_key, factors, strategy="first", dtype=None
-):
+def _subsample_group(i, h5py_name, h5py_key, factors, strategy="first", dtype=None):
     """Auxiliary function to select first/last/mid of group in parallel"""
-    out = h5py.File(h5py_name)[h5py_key][i][
-        tuple(slice(_i0(strategy, f), None, f) for f in factors[1:])
-    ]
+    with h5py.File(h5py_name, "r") as h5f:
+        out = h5f[h5py_key][i][
+            tuple(slice(_i0(strategy, factor), None, factor) for factor in factors[1:])
+        ][...]
     return out if dtype is None else out.astype(dtype)
 
 
 def _select(x, axis, which):
     """Auxiliary function to select nanfirst/nanlast/nanmid in parallel"""
-    y = (
-        np.moveaxis(x, 0, -1)
-        if axis == 0
-        else np.reshape(x, x.shape[: len(axis)] + (-1,))
-    )
+    y = np.moveaxis(x, 0, -1) if axis == 0 else np.reshape(x, x.shape[: len(axis)] + (-1,))
     n = y.shape[-1]
     if which == "first":
         ind = range(n)
@@ -169,10 +160,7 @@ def _subsample_array(
             return np.array(
                 ThreadPool(n_jobs).map(
                     lambda i: array[i][
-                        tuple(
-                            slice(_i0(strategy, f), None, f)
-                            for f in factors[1:]
-                        )
+                        tuple(slice(_i0(strategy, f), None, f) for f in factors[1:])
                     ].astype(dtype),
                     range(_i0(strategy, f0), T, f0),
                 )
@@ -190,9 +178,7 @@ def _subsample_array(
                     ),
                 )
             )
-    return array[
-        tuple(slice(_i0(strategy, f), None, f) for f in factors)
-    ].astype(dtype)
+    return array[tuple(slice(_i0(strategy, f), None, f) for f in factors)].astype(dtype)
 
 
 def _subsample_array_nan(
@@ -212,12 +198,12 @@ def _subsample_array_nan(
         n_jobs = 1  # it's faster to use only 1 job for small data
 
     f = [
-        lambda i: fun(array[i: i + f0], 0).astype(dtype),  # only1axis
+        lambda i: fun(array[i : i + f0], 0).astype(dtype),  # only1axis
         lambda i: block_reduce(  # array is already float
-            array[i: i + f0], factors, fun, np.nan
+            array[i : i + f0], factors, fun, np.nan
         )[0].astype(dtype),
         lambda i: block_reduce(  # array is integer
-            array[i: i + f0].astype(np.float32), factors, fun, np.nan
+            array[i : i + f0].astype(np.float32), factors, fun, np.nan
         )[0].astype(dtype),
     ][(not only1axis) * (1 + np.issubdtype(array.dtype, np.integer))]
 
@@ -265,9 +251,7 @@ def _format_factors(factors, output_fps, input_fps, ndim):
         )
         if output_fps > input_fps:
             raise ValueError("Output FPS cannot be greater than input FPS")
-        factors = (n_frames_from_hz(input_fps, output_fps),) + (1,) * (
-            ndim - 1
-        )
+        factors = (n_frames_from_hz(input_fps, output_fps),) + (1,) * (ndim - 1)
     if isinstance(factors, int):
         factors = (factors,) + (1,) * (ndim - 1)
     return factors
@@ -340,9 +324,7 @@ def downsample_array(
 
     if array.ndim == 1 or np.prod(array.shape[1:]) * factors[0] < 50000:
         n_jobs = 1  # it's faster to use only 1 job for small data
-    perfectly_divisible = all(
-        [i % j == 0 for i, j in zip(array.shape, factors)]
-    )
+    perfectly_divisible = all([i % j == 0 for i, j in zip(array.shape, factors)])
 
     if perfectly_divisible or skipna:
         return _downsample_array_nan(array, factors, fun, n_jobs, dtype)
@@ -364,12 +346,12 @@ def _downsample_array_nan(
     only1axis = len(factors) == 1 or all(f == 1 for f in factors[1:])
 
     f = [
-        lambda i: fun(array[i: i + f0], 0).astype(dtype),  # only1axis
+        lambda i: fun(array[i : i + f0], 0).astype(dtype),  # only1axis
         lambda i: block_reduce(  # array is already float
-            array[i: i + f0], factors, fun, np.nan
+            array[i : i + f0], factors, fun, np.nan
         )[0].astype(dtype),
         lambda i: block_reduce(  # array is integer
-            array[i: i + f0].astype(np.float32), factors, fun, np.nan
+            array[i : i + f0].astype(np.float32), factors, fun, np.nan
         )[0].astype(dtype),
     ][(not only1axis) * (1 + np.issubdtype(array.dtype, np.integer))]
 
@@ -414,12 +396,12 @@ def _downsample_array(
     nans = []
     # Determine the appropriate function based on only1axis and data type
     downsample_func = [
-        lambda i: fun(array[i: i + f0], 0).astype(dtype),  # only1axis
+        lambda i: fun(array[i : i + f0], 0).astype(dtype),  # only1axis
         lambda i: block_reduce(  # array is already float
-            array[i: i + f0], factors, nanfun, np.nan
+            array[i : i + f0], factors, nanfun, np.nan
         )[0].astype(dtype),
         lambda i: block_reduce(  # array is integer
-            array[i: i + f0].astype(np.float32),
+            array[i : i + f0].astype(np.float32),
             factors,
             nanfun,
             np.nan,
@@ -428,13 +410,12 @@ def _downsample_array(
 
     def detect_nans(i):
         """auxiliary function to determine places of NaNs in output array"""
-        return block_reduce(array[i: i + f0], factors, np.sum, 0)[0]
+        return block_reduce(array[i : i + f0], factors, np.sum, 0)[0]
 
     if n_jobs == 1:  # no parallelization
         array_out = np.array([downsample_func(i) for i in range(0, T, f0)])
         if not only1axis:
-            nans = np.isnan(np.array([detect_nans(i)
-                            for i in range(0, T, f0)]))
+            nans = np.isnan(np.array([detect_nans(i) for i in range(0, T, f0)]))
     elif isinstance(array, h5py.Dataset) and array.compression:
         # it's faster to use multiprocessing.Pool for compressed h5 data
         array_out = np.array(
@@ -468,12 +449,9 @@ def _downsample_array(
                 )
             )
     else:  # parallelize using ThreadPool
-        array_out = np.array(ThreadPool(n_jobs).map(
-            downsample_func, range(0, T, f0)))
+        array_out = np.array(ThreadPool(n_jobs).map(downsample_func, range(0, T, f0)))
         if not only1axis:
-            nans = np.isnan(
-                np.array(ThreadPool(n_jobs).map(detect_nans, range(0, T, f0)))
-            )
+            nans = np.isnan(np.array(ThreadPool(n_jobs).map(detect_nans, range(0, T, f0))))
     # Assign NaNs if detected
     if np.any(nans):
         array_out[nans] = np.nan

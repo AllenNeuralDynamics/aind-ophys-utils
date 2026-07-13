@@ -4,6 +4,7 @@ Provides M-estimator norms (Tukey biweight variants) and the
 ``nonlinear_fit`` IRLS routine used to fit parametric bleach baselines.
 Also exposes a robust LOWESS smoother and a plotting helper.
 """
+
 import inspect
 from functools import partial
 from typing import Callable, Literal
@@ -11,11 +12,12 @@ from typing import Callable, Literal
 import jax
 import jax.numpy as jnp
 import numpy as np
-from aind_ophys_utils.signal_utils import percentile_filter
-from scipy.optimize import brentq, OptimizeResult, minimize
+from scipy.optimize import OptimizeResult, brentq, minimize
 from statsmodels.nonparametric._smoothers_lowess import lowess as _sm_lowess
 from statsmodels.robust import scale
 from statsmodels.robust.norms import RobustNorm
+
+from aind_ophys_utils.signal_utils import percentile_filter
 
 jax.config.update("jax_enable_x64", True)
 
@@ -171,9 +173,7 @@ class AsymmetricTukeyBiweight(RobustNorm):
         z = self.xp.asarray(z)
         c = self.xp.where(z > 0, self.c_pos, self.c_neg).astype(z.dtype)
         t2 = (z / c) ** 2
-        return self.xp.where(
-            self.xp.abs(z) <= c, (1 - t2) ** 2 - 4 * t2 * (1 - t2), 0.0
-        )
+        return self.xp.where(self.xp.abs(z) <= c, (1 - t2) ** 2 - 4 * t2 * (1 - t2), 0.0)
 
     def with_xp(self, xp):
         """Return a copy of this norm bound to a different array namespace (np or jnp)."""
@@ -447,14 +447,7 @@ def nonlinear_fit(  # noqa: C901
     # ----------------------------
     fun_or_pair = make_objective()
     fun, jac_ = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
-    res = minimize(
-        fun,
-        x,
-        bounds=bounds,
-        method=optimizer,
-        jac=jac_,
-        options=optimizer_options,
-    )
+    res = minimize(fun, x, bounds=bounds, method=optimizer, jac=jac_, options=optimizer_options)
     x = jnp.asarray(res.x, dtype=dtype) if use_jax else res.x
 
     # ----------------------------
@@ -500,14 +493,7 @@ def nonlinear_fit(  # noqa: C901
 
         fun_or_pair = make_objective(_sigma)
         fun, jac_ = fun_or_pair if use_jax else (fun_or_pair, provides_grad)
-        res = minimize(
-            fun,
-            x,
-            bounds=bounds,
-            method=optimizer,
-            jac=jac_,
-            options=optimizer_options,
-        )
+        res = minimize(fun, x, bounds=bounds, method=optimizer, jac=jac_, options=optimizer_options)
 
         x_new = jnp.asarray(res.x, dtype=dtype) if use_jax else res.x
         at_target = fixed_sigma is None or float(_sigma) <= fixed_sigma * (1 + 1e-9)
@@ -585,15 +571,8 @@ def robust_lowess(
     delta = 0.01 * (t[-1] - t[0])
 
     for _ in range(max(1, maxiter) if M is not None else 1):
-        fluctuation = _sm_lowess(
-            y,
-            t,
-            t,
-            resid_weights=w_current,
-            frac=frac,
-            it=0,
-            delta=delta,
-        )[0][:, 1]
+        fluctuation = _sm_lowess(y, t, t, resid_weights=w_current, frac=frac, it=0, delta=delta)
+        fluctuation = fluctuation[0][:, 1]
 
         if M is None:
             sigma = None
@@ -731,17 +710,13 @@ def fit_baseline_fluctuations(
     # dispatch — method-specific, receives y, returns fluctuation
     if method == "lowess":
         frac = window_samples / len(y)
-        fluctuation, w, sigma = robust_lowess(
-            y, t, frac, M, weights, _sigma, maxiter, tol
-        )
+        fluctuation, w, sigma = robust_lowess(y, t, frac, M, weights, _sigma, maxiter, tol)
         info = {"lowess_weights": w, "lowess_sigma": sigma}
     elif method == "percentile":
         size = window_samples
         if percentile is None:
             # estimate from weights if available
-            mu_w = (
-                np.average(y, weights=weights) if weights is not None else np.median(y)
-            )
+            mu_w = np.average(y, weights=weights) if weights is not None else np.median(y)
             percentile = np.clip(np.mean(y <= mu_w) * 100, 5, 50)
         fluctuation = percentile_filter(y, percentile, size)
         info = {"percentile": percentile, "size": size}
@@ -887,14 +862,22 @@ def fit_baseline(
         M_np = M.with_xp(np) if backend == "jax" else M
         if float(min(M_np.weights(2), M_np.weights(-2))) < 0.5:
             _z_half = brentq(
-                lambda z: float(min(M_np.weights(z), M_np.weights(-z))) - 0.5,
-                0.0, 2.0,
+                lambda z: float(min(M_np.weights(z), M_np.weights(-z))) - 0.5, 0.0, 2.0
             )
             _relax_sigma = fixed_sigma * 2.0 / _z_half
 
     # Round 1
     F0trend, res = nonlinear_fit(
-        trace, t, model, x0, bounds, M, weights, fixed_sigma, maxiter, tol,
+        trace,
+        t,
+        model,
+        x0,
+        bounds,
+        M,
+        weights,
+        fixed_sigma,
+        maxiter,
+        tol,
         sigma_anneal_steps=sigma_anneal_steps,
         optimizer=optimizer,
         optimizer_options=optimizer_options,
@@ -906,7 +889,16 @@ def fit_baseline(
     # Round 2 — sigma relaxation if round 1 is degenerate
     if _relax_sigma is not None and float(np.mean(trace < F0trend)) < sigma_relax_threshold:
         F0trend, res = nonlinear_fit(
-            trace, t, model, x0, bounds, M, weights, _relax_sigma, maxiter, tol,
+            trace,
+            t,
+            model,
+            x0,
+            bounds,
+            M,
+            weights,
+            _relax_sigma,
+            maxiter,
+            tol,
             sigma_anneal_steps=sigma_anneal_steps,
             optimizer=optimizer,
             optimizer_options=optimizer_options,

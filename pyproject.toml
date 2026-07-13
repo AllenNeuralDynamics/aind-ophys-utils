@@ -30,13 +30,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    'black',
     'coverage',
-    'flake8',
     'interrogate',
-    'isort',
-    'Sphinx',
-    'furo',
+    'mkdocs',
+    'mkdocs-material',
+    'mkdocstrings[python]',
+    'ruff',
     'pytest'
 ]
 
@@ -46,26 +45,14 @@ where = ["src"]
 [tool.setuptools.dynamic]
 version = {attr = "aind_ophys_utils.__version__"}
 
-[tool.black]
-line-length = 79
-target_version = ['py36']
-exclude = '''
+[tool.ruff]
+line-length = 100
 
-(
-  /(
-      \.eggs         # exclude a few common directories in the
-    | \.git          # root of the project
-    | \.hg
-    | \.mypy_cache
-    | \.tox
-    | \.venv
-    | _build
-    | build
-    | dist
-  )/
-  | .gitignore
-)
-'''
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/aind_ophys_utils/signal_utils.py" = ["C901"]
 
 [tool.coverage.run]
 omit = ["*__init__*"]
@@ -79,10 +66,6 @@ exclude_lines = [
     "pragma: no cover"
 ]
 fail_under = 100
-
-[tool.isort]
-line_length = 79
-profile = "black"
 
 [tool.interrogate]
 exclude = ["setup.py", "docs", "build"]
