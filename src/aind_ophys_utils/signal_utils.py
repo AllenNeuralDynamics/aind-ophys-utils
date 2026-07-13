@@ -21,9 +21,9 @@ def percentile_filter(
     """
     Fast 1D running percentile filter with reflect boundary handling.
 
-    Uses :func:`scipy.ndimage.percentile_filter` which has O(log n) complexity
-    since scipy 1.15.0. When ``skipna=True``, falls back to a pandas rolling
-    quantile which ignores NaN values within each window.
+    Uses :func:`scipy.ndimage.percentile_filter`. When ``skipna=True``, falls
+    back to a pandas rolling quantile which ignores NaN values within each
+    window. O(log n) complexity is available in scipy >= 1.15.0.
 
     Parameters
     ----------

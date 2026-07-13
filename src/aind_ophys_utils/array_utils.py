@@ -1,13 +1,19 @@
 """Utils to manipulate arrays"""
 
+import multiprocessing
 import warnings
 from functools import partial
 from itertools import product
-from multiprocessing.pool import Pool, ThreadPool
+from multiprocessing.pool import ThreadPool
 
 import h5py
 import numpy as np
 from skimage.measure import block_reduce
+
+_mp_ctx = multiprocessing.get_context(
+    "fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn"
+)
+Pool = _mp_ctx.Pool
 
 
 def n_frames_from_hz(input_frame_rate: float, downsampled_frame_rate: float) -> int:
@@ -37,22 +43,19 @@ def n_frames_from_hz(input_frame_rate: float, downsampled_frame_rate: float) -> 
 
 def _downsample_group(i, h5py_name, h5py_key, factors, fun, dtype=None, cval=np.nan):
     """Auxiliary function to compute group max/mean/medians in parallel"""
-    array = h5py.File(h5py_name)[h5py_key]
-    T = array.shape[0]
-    if fun != _nanmid:
-        factors = (min(factors[0], T - i),) + factors[1:]
+    with h5py.File(h5py_name, "r") as h5f:
+        dataset = h5f[h5py_key]
+        T = dataset.shape[0]
+        if fun != _nanmid:
+            factors = (min(factors[0], T - i),) + factors[1:]
+        chunk = dataset[i : i + factors[0]][...]  # read into numpy before closing
     if all(f == 1 for f in factors[1:]):
-        out = fun(array[i : i + factors[0]], 0)
+        out = fun(chunk, 0)
     else:
         nan_type = (
-            np.float32 if np.issubdtype(tmp := array.dtype, np.integer) and np.isnan(cval) else tmp
+            np.float32 if np.issubdtype(tmp := chunk.dtype, np.integer) and np.isnan(cval) else tmp
         )
-        out = block_reduce(
-            array[i : i + factors[0]].astype(nan_type),
-            factors,
-            fun,
-            cval,
-        )[0]
+        out = block_reduce(chunk.astype(nan_type), factors, fun, cval)[0]
     return out if dtype is None else out.astype(dtype)
 
 
@@ -63,9 +66,10 @@ def _i0(s, f):
 
 def _subsample_group(i, h5py_name, h5py_key, factors, strategy="first", dtype=None):
     """Auxiliary function to select first/last/mid of group in parallel"""
-    out = h5py.File(h5py_name)[h5py_key][i][
-        tuple(slice(_i0(strategy, f), None, f) for f in factors[1:])
-    ]
+    with h5py.File(h5py_name, "r") as h5f:
+        out = h5f[h5py_key][i][
+            tuple(slice(_i0(strategy, factor), None, factor) for factor in factors[1:])
+        ][...]
     return out if dtype is None else out.astype(dtype)
 
 
