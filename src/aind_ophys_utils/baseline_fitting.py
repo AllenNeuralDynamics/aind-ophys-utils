@@ -287,8 +287,8 @@ def nonlinear_fit(  # noqa: C901
         pre-pass from a prior fit's ``res.weights``. ``None`` → uniform weights.
     fixed_sigma : float or None
         Target robust scale estimate. When provided, the IRLS scale is annealed
-        from the data-driven MAD down to ``fixed_sigma`` over
-        ``sigma_anneal_steps`` intermediate iterations, then held at
+        from the data-driven MAD down to ``fixed_sigma`` with
+        ``sigma_anneal_steps`` intermediate values in between, then held at
         ``fixed_sigma`` (see the scale-schedule note below). Useful when the
         scale is known in advance or inherited from a previous fit. ``None`` →
         plain MAD-reweighted IRLS at every iteration (no fixed target, no
