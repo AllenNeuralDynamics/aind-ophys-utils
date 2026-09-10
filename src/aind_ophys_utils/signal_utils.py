@@ -45,6 +45,8 @@ def percentile_filter(
     filtered_trace: ndarray
         Filtered array. Has the same shape as `input`.
     """
+    if size < 1:
+        raise ValueError(f"size must be a positive integer, got {size}")
     if dtype is None:
         dtype = input.dtype
     if size > len(input):

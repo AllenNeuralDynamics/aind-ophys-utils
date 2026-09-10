@@ -122,6 +122,14 @@ def test_median_filter_skipna(array, size, expected):
     np.testing.assert_allclose(output, expected, equal_nan=True)
 
 
+@pytest.mark.parametrize("size", [0, -1, -5])
+def test_percentile_filter_invalid_size(size):
+    """A non-positive size raises a clear error instead of silently
+    misbehaving (e.g. from a degenerate filter length computed upstream)."""
+    with pytest.raises(ValueError, match="size must be a positive integer"):
+        percentile_filter(np.arange(10.0), 50, size)
+
+
 def test_fill_nan():
     """Test fill_nan interpolates NaN values"""
     arr = np.array([1.0, np.nan, np.nan, 4.0])
