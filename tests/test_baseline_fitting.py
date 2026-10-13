@@ -319,10 +319,18 @@ class TestNonlinearFitSigmaAnneal:
             assert r_jump > sd                        # single jump lands in bad basin
 
     def test_easy_regime_unaffected_by_anneal_steps(self):
-        """Sparse activity: annealing and single-jump converge to the same fit."""
+        """Sparse activity: annealing and single-jump converge to the same fit.
+
+        Tolerance set relative to scipy's own L-BFGS-B defaults
+        (nonlinear_fit's default optimizer_options as of the scipy-defaults
+        change) rather than the previous, much tighter override -- the two
+        anneal paths still land in the same basin, just not machine-
+        precision-identical (observed max diff ~0.0021 * sd here; ~2x
+        margin below).
+        """
         y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
         assert np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 4, sd),
-                           atol=1e-4 * sd + 1e-6)
+                           atol=5e-3 * sd + 1e-6)
 
 
 # ---------------------------------------------------------------------------
