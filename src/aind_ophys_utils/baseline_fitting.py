@@ -322,8 +322,20 @@ def nonlinear_fit(  # noqa: C901
     optimizer : str
         Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
     optimizer_options : dict or None
-        Options forwarded to ``scipy.optimize.minimize``.
-        Defaults to ``{"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}``.
+        Options forwarded to ``scipy.optimize.minimize``. ``None`` (default)
+        uses ``scipy``'s own ``"L-BFGS-B"`` defaults (``maxiter=15000``,
+        ``ftol``/``gtol`` around ``2.2e-9``/``1e-5`` as of scipy 1.x) --
+        previously this defaulted to an explicit, much tighter override
+        (``{"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}``, ~1000x tighter
+        on ``ftol``/``gtol`` than scipy itself considers reasonable). That
+        override gave no measurable accuracy benefit -- IRLS callers bound
+        this via their own, far looser outer ``tol`` anyway -- while making
+        an aggressive, redescending ``M`` (small ``c_pos``) on real, messy
+        data able to turn the robust loss landscape locally flat over large
+        regions, which let ``L-BFGS-B`` burn through most of a 20000-
+        iteration budget chasing a ``gtol`` it might never reach, rather
+        than stopping. Pass an explicit dict to restore the old behavior or
+        tune further.
     backend : {"numpy", "jax"}
         Numerical backend. ``"jax"`` enables automatic differentiation and
         JIT compilation; ``"numpy"`` uses model-bundled Jacobians when
@@ -342,9 +354,6 @@ def nonlinear_fit(  # noqa: C901
         and ``res.weights`` (np.ndarray, shape ``(N,)``, M-estimator weights),
         set only when ``M`` is not ``None``.
     """
-    if optimizer_options is None:
-        optimizer_options = {"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}
-
     use_jax = backend == "jax"
     if use_jax:
         if M is not None:
@@ -826,8 +835,8 @@ def fit_baseline(
     optimizer : str
         Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
     optimizer_options : dict or None
-        Options forwarded to ``scipy.optimize.minimize``.
-        Defaults to ``{"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}``.
+        Options forwarded to ``scipy.optimize.minimize`` (see
+        :func:`nonlinear_fit`'s own docstring for defaults and rationale).
     backend : {"numpy", "jax"}
         Backend for the trend fit. ``"jax"`` enables autodiff and JIT
         compilation; ``"numpy"`` uses analytic Jacobians when available.
