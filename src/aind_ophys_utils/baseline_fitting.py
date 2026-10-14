@@ -238,7 +238,7 @@ def nonlinear_fit(  # noqa: C901
     fixed_sigma: float | None = None,
     maxiter: int = 5,
     tol: float = 1e-3,
-    sigma_anneal_steps: int = 4,
+    sigma_anneal_steps: int = 2,
     # --- optimizer ---
     optimizer: str = "L-BFGS-B",
     optimizer_options: dict | None = None,
@@ -287,33 +287,38 @@ def nonlinear_fit(  # noqa: C901
         pre-pass from a prior fit's ``res.weights``. ``None`` → uniform weights.
     fixed_sigma : float or None
         Target robust scale estimate. When provided, the IRLS scale is annealed
-        from the data-driven MAD down to ``fixed_sigma`` over the first
-        ``sigma_anneal_steps`` iterations, then held at ``fixed_sigma`` (see the
-        scale-schedule note below). Useful when the scale is known in advance or
-        inherited from a previous fit. ``None`` → plain MAD-reweighted IRLS at
-        every iteration (no fixed target, no annealing).
+        from the data-driven MAD down to ``fixed_sigma`` with
+        ``sigma_anneal_steps`` intermediate values in between, then held at
+        ``fixed_sigma`` (see the scale-schedule note below). Useful when the
+        scale is known in advance or inherited from a previous fit. ``None`` →
+        plain MAD-reweighted IRLS at every iteration (no fixed target, no
+        annealing).
 
         Scale schedule across the fit (when ``fixed_sigma`` is given):
 
         1. OLS pre-pass — unweighted (or ``weights``-weighted) least squares.
-        2. Annealing — over the first ``sigma_anneal_steps`` IRLS iterations the
-           scale follows a geometric ramp from ``max(fixed_sigma, MAD)`` (the
-           MAD of the OLS residuals, floored at the target) down to
-           ``fixed_sigma``. Starting loose and tightening gradually keeps the
-           non-convex M-estimator out of the bad local minimum it falls into
-           when the trend must drop below heavy one-sided activity.
+        2. Annealing — over the first ``sigma_anneal_steps + 2`` IRLS
+           iterations the scale follows a geometric ramp from
+           ``max(fixed_sigma, MAD)`` (the MAD of the OLS residuals, floored at
+           the target) down to ``fixed_sigma``, with ``sigma_anneal_steps``
+           intermediate values in between the two endpoints. Starting loose
+           and tightening gradually keeps the non-convex M-estimator out of
+           the bad local minimum it falls into when the trend must drop below
+           heavy one-sided activity.
         3. Remaining IRLS iterations — held at ``fixed_sigma``.
 
-        ``sigma_anneal_steps=1`` collapses steps 2-3 to a single jump
-        (``max(fixed_sigma, MAD)`` then ``fixed_sigma``); ``>=3`` enables the
-        graduated annealing that extends the usable activity range.
+        ``sigma_anneal_steps=0`` collapses annealing to a single jump
+        (``max(fixed_sigma, MAD)`` then ``fixed_sigma``, with no intermediate
+        value); ``>=1`` enables graduated annealing that extends the usable
+        activity range.
     sigma_anneal_steps : int
-        Number of geometric steps used to anneal the IRLS scale from the MAD of
-        the OLS residuals down to ``fixed_sigma`` (see ``fixed_sigma``). Only
-        used when ``fixed_sigma`` is not None. ``1`` reproduces the legacy
-        single-jump behaviour; the default ``4`` enables graduated annealing.
+        Number of *intermediate* geometric steps used to anneal the IRLS scale
+        from the MAD of the OLS residuals down to ``fixed_sigma`` (see
+        ``fixed_sigma``), not counting the starting and final values. Only
+        used when ``fixed_sigma`` is not None. ``0`` collapses annealing to a
+        single jump; the default ``2`` enables graduated annealing.
         Iterations are run until at least the ramp completes, so set
-        ``maxiter >= sigma_anneal_steps`` for the full schedule.
+        ``maxiter >= sigma_anneal_steps + 2`` for the full schedule.
     maxiter : int
         Maximum number of IRLS outer iterations. Ignored when ``M=None``.
     tol : float
@@ -453,12 +458,13 @@ def nonlinear_fit(  # noqa: C901
     # ----------------------------
     # Stage 2 — sigma anneal schedule (only with a fixed_sigma target).
     # Geometric ramp from max(fixed_sigma, MAD of OLS residuals) down to
-    # fixed_sigma over sigma_anneal_steps iterations. The MAD is the symmetric,
-    # M-agnostic scale vanilla IRLS would use; flooring at fixed_sigma keeps the
-    # ramp from ever starting tighter than the target. Tightening gradually
-    # (rather than jumping straight to fixed_sigma) keeps the non-convex
-    # M-estimator out of the bad local minimum it hits when the trend must drop
-    # below heavy one-sided activity. Directionality is left to M.
+    # fixed_sigma, with sigma_anneal_steps intermediate values between the two
+    # endpoints. The MAD is the symmetric, M-agnostic scale vanilla IRLS would
+    # use; flooring at fixed_sigma keeps the ramp from ever starting tighter
+    # than the target. Tightening gradually (rather than jumping straight to
+    # fixed_sigma) keeps the non-convex M-estimator out of the bad local
+    # minimum it hits when the trend must drop below heavy one-sided activity.
+    # Directionality is left to M.
     # ----------------------------
     sigma_schedule = None
     if M is not None and fixed_sigma is not None:
@@ -469,7 +475,7 @@ def nonlinear_fit(  # noqa: C901
         else:
             mad0 = scale.mad(resid0, center=0) or float(np.std(resid0))
         sigma_schedule = np.geomspace(
-            max(fixed_sigma, mad0), fixed_sigma, max(1, sigma_anneal_steps)
+            max(fixed_sigma, mad0), fixed_sigma, max(0, sigma_anneal_steps) + 2
         )
     n_sched = len(sigma_schedule) if sigma_schedule is not None else 0
     norm = jnp.linalg.norm if use_jax else np.linalg.norm
@@ -744,7 +750,7 @@ def fit_baseline(
     fixed_sigma: float | None = None,
     maxiter: int = 5,
     tol: float = 1e-3,
-    sigma_anneal_steps: int = 4,
+    sigma_anneal_steps: int = 2,
     sigma_relax_threshold: float = 0.05,
     # --- smoother ---
     mode: Literal["ratio", "subtract"] = "ratio",
@@ -805,9 +811,9 @@ def fit_baseline(
     tol : float
         Convergence tolerance for both IRLS loops.
     sigma_anneal_steps : int
-        Number of geometric steps used to anneal the trend-fit IRLS scale from
-        the MAD of the OLS residuals down to ``fixed_sigma``. Forwarded to
-        :func:`nonlinear_fit`; see its docstring. Default ``4``.
+        Number of intermediate geometric steps used to anneal the trend-fit
+        IRLS scale from the MAD of the OLS residuals down to ``fixed_sigma``.
+        Forwarded to :func:`nonlinear_fit`; see its docstring. Default ``2``.
     sigma_relax_threshold : float
         Proportion-of-negative-residuals threshold for triggering a second
         IRLS attempt with relaxed sigma. Default ``0.05``.
