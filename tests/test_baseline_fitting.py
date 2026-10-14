@@ -7,9 +7,12 @@ import matplotlib
 
 matplotlib.use("Agg")  # headless backend — must be set before pyplot import.
 
+from unittest.mock import patch  # noqa: E402
+
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
+from scipy.optimize import minimize  # noqa: E402
 
 from aind_ophys_utils.baseline_fitting import (  # noqa: E402
     AsymmetricTukeyBiweight,
@@ -173,6 +176,21 @@ class TestNonlinearFitNumpy:
         fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
         assert fitted.shape == y.shape
         assert np.allclose(res.x, true, atol=2.0)
+
+    def test_optimizer_options_forwarded_to_minimize(self):
+        """omitted optimizer_options reaches minimize as None (scipy's own
+        defaults); an explicit dict reaches it unchanged."""
+        y, t, _ = _decay_trace()
+        x0 = np.array([1.0, 1.0, 50.0])
+
+        with patch("aind_ophys_utils.baseline_fitting.minimize", wraps=minimize) as m:
+            nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
+        assert m.call_args.kwargs["options"] is None
+
+        explicit = {"maxiter": 7}
+        with patch("aind_ophys_utils.baseline_fitting.minimize", wraps=minimize) as m:
+            nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy", optimizer_options=explicit)
+        assert m.call_args.kwargs["options"] == explicit
 
     def test_ols_with_weights(self):
         """numpy OLS branch with per-point weights."""
@@ -362,9 +380,12 @@ class TestNonlinearFitSigmaAnneal:
             assert r_jump > sd  # single jump lands in bad basin
 
     def test_easy_regime_unaffected_by_anneal_steps(self):
-        """Sparse activity: annealing and single-jump converge to the same fit."""
+        """Sparse activity: annealing and single-jump converge to the same basin."""
         y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
-        assert np.allclose(self._fit(y, t, 0, sd), self._fit(y, t, 2, sd), atol=1e-4 * sd + 1e-6)
+        # Not bit-identical -- scipy's default L-BFGS-B tolerances stop each
+        # path a bit short of machine precision.
+        assert np.allclose(self._fit(y, t, 0, sd), self._fit(y, t, 2, sd),
+                           atol=5e-3 * sd + 1e-6)
 
 
 # ---------------------------------------------------------------------------
