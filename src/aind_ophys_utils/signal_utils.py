@@ -1,11 +1,12 @@
-""" Utils for signal processing """
+"""Utils for signal processing"""
 
+import warnings
 from multiprocessing.pool import Pool, ThreadPool
-
 
 import numpy as np
 import pandas as pd
 import scipy
+import scipy.ndimage
 import torch
 from scipy import signal
 
@@ -15,11 +16,14 @@ def percentile_filter(
     percentile: float,
     size: int,
     dtype: type | None = None,
+    skipna: bool = False,
 ) -> np.ndarray:
     """
-    Fast 1D running percentile filter using reflection
-    to extend the input array beyond its boundaries.
-    Uses pandas if input and filter size are long, scipy if short.
+    Fast 1D running percentile filter with reflect boundary handling.
+
+    Uses :func:`scipy.ndimage.percentile_filter`. When ``skipna=True``, falls
+    back to a pandas rolling quantile which ignores NaN values within each
+    window. O(log n) complexity is available in scipy >= 1.15.0.
 
     Parameters
     ----------
@@ -32,6 +36,9 @@ def percentile_filter(
     dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
+    skipna: bool
+        If True, NaN values are ignored within each window. If False (default),
+        NaNs propagate to the output.
 
     Returns
     -------
@@ -41,37 +48,29 @@ def percentile_filter(
     if dtype is None:
         dtype = input.dtype
     if size > len(input):
-        return (np.percentile(input, percentile) * np.ones_like(input)).astype(
-            dtype
-        )
-    if size > 20 and len(input) > 200:
+        fn = np.nanpercentile if skipna else np.percentile
+        return (fn(input, percentile) * np.ones_like(input)).astype(dtype)
+    if skipna:
+        if size == 1:
+            return input.copy().astype(dtype)
+        padded = np.concatenate((input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1]))
         return (
-            pd.Series(
-                np.concatenate(
-                    (
-                        input[: size // 2][::-1],
-                        input,
-                        input[: -size // 2 - 1: -1],
-                    )
-                )
-            )
-            .rolling(size, center=True)
+            pd.Series(padded)
+            .rolling(size, center=True, min_periods=1)
             .quantile(percentile / 100)
-            .to_numpy(dtype)[size // 2: -size // 2]
+            .to_numpy(dtype)[size // 2 : -size // 2]
         )
-    else:
-        return scipy.ndimage.percentile_filter(
-            input, percentile, size, output=dtype
-        )
+    return scipy.ndimage.percentile_filter(input, percentile, size, output=dtype)
 
 
 def median_filter(
-    input: np.ndarray, size: int, dtype: type | None = None
+    input: np.ndarray,
+    size: int,
+    dtype: type | None = None,
+    skipna: bool = False,
 ) -> np.ndarray:
     """
-    Fast 1D median filtering using reflection to
-    extend the input array beyond its boundaries.
-    Uses pandas if input and filter size are long, scipy if short.
+    Fast 1D median filtering with reflect boundary handling.
 
     Parameters
     ----------
@@ -82,18 +81,22 @@ def median_filter(
     dtype: type | None
         The dtype of the returned array. By default an array of
         the same dtype as input will be created.
+    skipna: bool
+        If True, NaN values are ignored within each window.
 
     Returns
     -------
     filtered_trace: ndarray
     """
-    return percentile_filter(input, 50, size, dtype)
+    return percentile_filter(input, 50, size, dtype, skipna=skipna)
 
 
-def nanmedian_filter(
-    input: np.ndarray, size: int, dtype: type | None = None
-) -> np.array:
+def nanmedian_filter(input: np.ndarray, size: int, dtype: type | None = None) -> np.ndarray:
     """1D median filtering with nan values
+
+    .. deprecated::
+        Use :func:`median_filter` with ``skipna=True`` instead.
+        Will be removed in a future release.
 
     Parameters
     ----------
@@ -109,24 +112,23 @@ def nanmedian_filter(
     -------
     filtered_trace: ndarray
     """
+    warnings.warn(
+        "nanmedian_filter is deprecated; use median_filter(..., skipna=True) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     filtered_trace = (
-        pd.Series(
-            np.concatenate(
-                (input[: size // 2][::-1], input, input[: -size // 2 - 1: -1])
-            )
-        )
+        pd.Series(np.concatenate((input[: size // 2][::-1], input, input[: -size // 2 - 1 : -1])))
         .rolling(size, center=True, min_periods=1)
         .median()
-        .to_numpy(input.dtype if dtype is None else dtype)[
-            size // 2: -size // 2
-        ]
+        .to_numpy(input.dtype if dtype is None else dtype)[size // 2 : -size // 2]
     )
     if np.isnan(filtered_trace).any():
-        filtered_trace = _fill_nan(filtered_trace)
+        filtered_trace = fill_nan(filtered_trace)
     return filtered_trace
 
 
-def _fill_nan(input: np.ndarray) -> np.ndarray:
+def fill_nan(input: np.ndarray) -> np.ndarray:
     """Fill nan values in an array with interpolation
 
     Parameters
@@ -140,17 +142,17 @@ def _fill_nan(input: np.ndarray) -> np.ndarray:
         Copied input array with filled nan values.
     """
     nan_mask = np.isnan(input)
-    nan_indices = np.where(nan_mask)[0]
     no_nan_indices = np.where(~nan_mask)[0]
-    interpolated_values = np.interp(
-        nan_indices, no_nan_indices, input[no_nan_indices]
-    )
+    if no_nan_indices.size == 0:
+        return input.copy()
+    nan_indices = np.where(nan_mask)[0]
+    interpolated_values = np.interp(nan_indices, no_nan_indices, input[no_nan_indices])
     output = input.copy()
     output[nan_mask] = interpolated_values
     return output
 
 
-def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
+def robust_std(x: np.ndarray, axis: int = -1, skipna: bool = False) -> float | np.ndarray:
     """
     Compute the appropriately scaled median absolute deviation
     assuming normally distributed data. This is a robust statistic.
@@ -162,17 +164,21 @@ def robust_std(x: np.ndarray, axis: int = -1) -> float | np.ndarray:
     axis: int
         Axis along which the standard deviation is computed; the default is
         over the last axis (i.e. ``axis=-1``).
+    skipna: bool
+        If True, NaN values are ignored. If False (default), returns NaN
+        when any NaN is present.
 
     Returns
     -------
     std: float or ndarray
         A robust estimation of standard deviation.
     """
-    if np.any(np.isnan(x)) or x.size == 0:
+    if x.size == 0:
         return np.nan
-    mad = np.median(
-        np.abs(x - np.median(x, axis=axis, keepdims=True)), axis=axis
-    )
+    if not skipna and np.any(np.isnan(x)):
+        return np.nan
+    median_fn = np.nanmedian if skipna else np.median
+    mad = median_fn(np.abs(x - median_fn(x, axis=axis, keepdims=True)), axis=axis)
     return 1.4826 * mad
 
 
@@ -195,12 +201,8 @@ def _nanwelch_1d_array(
         data_1d = np.concatenate(
             (
                 data_1d[: max_num_samples // 3],
-                data_1d[
-                    int(T // 2 - max_num_samples / 6): int(
-                        T // 2 + max_num_samples / 6
-                    )
-                ],
-                data_1d[-max_num_samples // 3:],
+                data_1d[int(T // 2 - max_num_samples / 6) : int(T // 2 + max_num_samples / 6)],
+                data_1d[-max_num_samples // 3 :],
             ),
         )
     if T < nperseg:  # return NaN if not enough non-NaN values
@@ -318,7 +320,7 @@ def nanwelch(
     return f[0], np.array(Pxx)
 
 
-def noise_std(
+def noise_std(  # noqa: C901
     x: np.ndarray,
     method: str = "welch",
     max_num_samples: int = 3072,
@@ -362,7 +364,9 @@ def noise_std(
     device: str, default is 'cuda' if GPU is available.
         Device to use when using FFT method; 'cuda' or 'cpu'.
     skipna: bool
-        Exclude NaN values when computing the result.
+        Exclude NaN values when computing the result. For ``method='mad'``,
+        NaN frames are dropped after subtracting the median-filtered baseline.
+        For ``method='fft'``, NaN values are dropped before computing the FFT.
 
     Returns
     -------
@@ -372,16 +376,17 @@ def noise_std(
     if x.ndim > 1 and axis != -1:
         x = np.moveaxis(x, axis, -1)
     if method == "mad":
-        if skipna:
-            raise ValueError(  # pragma: no cover
-                "Excluding NaNs (skipna=True) isn't supported for method 'mad'"
-            )
         if x.ndim > 1:
             dims, T = x.shape[:-1], x.shape[-1]
             if n_jobs == 1:
                 return np.reshape(
                     [
-                        noise_std(y, method="mad", filter_length=filter_length)
+                        noise_std(
+                            y,
+                            method="mad",
+                            filter_length=filter_length,
+                            skipna=skipna,
+                        )
                         for y in x.reshape(-1, T)
                     ],
                     dims,
@@ -389,20 +394,26 @@ def noise_std(
             else:
                 res = ThreadPool(n_jobs).map(
                     lambda y: noise_std(
-                        y, method="mad", filter_length=filter_length
+                        y,
+                        method="mad",
+                        filter_length=filter_length,
+                        skipna=skipna,
                     ),
                     x.reshape(-1, T),
                 )
                 return np.reshape(res, dims).astype(x.dtype)
         else:
-            noise = x - median_filter(x, filter_length)
+            if not skipna and np.any(np.isnan(x)):
+                return np.nan
+            noise = x - median_filter(x, filter_length, skipna=skipna)
+            noise = noise[~np.isnan(noise)]
+            if noise.size == 0:
+                return np.nan
             # first pass removing positive outlier peaks
             filtered_noise_0 = noise[noise < (1.5 * np.abs(noise.min()))]
             rstd = robust_std(filtered_noise_0)
             # second pass removing remaining pos and neg peak outliers
-            filtered_noise_1 = filtered_noise_0[
-                abs(filtered_noise_0) < (2.5 * rstd)
-            ]
+            filtered_noise_1 = filtered_noise_0[abs(filtered_noise_0) < (2.5 * rstd)]
             return robust_std(filtered_noise_1)
     else:
         T = x.shape[-1]
@@ -412,11 +423,9 @@ def noise_std(
                     x[..., : max_num_samples // 3],
                     x[
                         ...,
-                        int(T // 2 - max_num_samples / 6): int(
-                            T // 2 + max_num_samples / 6
-                        ),
+                        int(T // 2 - max_num_samples / 6) : int(T // 2 + max_num_samples / 6),
                     ],
-                    x[..., -max_num_samples // 3:],
+                    x[..., -max_num_samples // 3 :],
                 ),
                 axis=-1,
             )
@@ -432,23 +441,32 @@ def noise_std(
                 res = ThreadPool(n_jobs).map(signal.welch, x)
                 ff = res[0][0]
                 psd = np.array([r[1] for r in res])
-            psd = (
-                torch.tensor(
-                    psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]
-                )
-                / 2
-            )
+            psd = torch.tensor(psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
         else:
             if skipna:
-                raise ValueError(  # pragma: no cover
-                    "Excluding NaNs (skipna=True) is not yet supported "
-                    "for method 'fft'"
-                )
+                if x.ndim > 1:
+                    dims = x.shape[:-1]
+                    return np.reshape(
+                        [
+                            noise_std(
+                                row,
+                                method="fft",
+                                max_num_samples=max_num_samples,
+                                noise_range=noise_range,
+                                device=device,
+                                skipna=True,
+                            )
+                            for row in x.reshape(-1, T)
+                        ],
+                        dims,
+                    )
+                x = x[~np.isnan(x)]
+                T = x.shape[-1]
+                if T == 0:
+                    return np.nan
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
-            xdft = xdft[
-                ..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))
-            ]
+            xdft = xdft[..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))]
             psd = abs(xdft) ** 2 / T
         noise = torch.sqrt(torch.mean(psd, -1)).cpu()
         return noise.item() if noise.dim() == 0 else noise.numpy()

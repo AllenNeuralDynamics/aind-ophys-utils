@@ -1,6 +1,6 @@
-""" Summary images for calcium imaging movie data """
-from multiprocessing.pool import ThreadPool
+"""Summary images for calcium imaging movie data"""
 
+from multiprocessing.pool import ThreadPool
 
 import h5py
 import numpy as np
@@ -69,9 +69,7 @@ def local_correlations(
     rho = torch.zeros(Y.shape[1:], device=device)
     mean = torch.nanmean if skipna else torch.mean
     std = nanstd if skipna else torch.std
-    w_mov = (Y - mean(Y, dim=0)) / (
-        std(Y, dim=0, correction=0) + torch.finfo(torch.float32).eps
-    )
+    w_mov = (Y - mean(Y, dim=0)) / (std(Y, dim=0, correction=0) + torch.finfo(torch.float32).eps)
 
     rho_h = mean(torch.multiply(w_mov[:, :-1, :], w_mov[:, 1:, :]), dim=0)
     rho_w = mean(torch.multiply(w_mov[:, :, :-1], w_mov[:, :, 1:]), dim=0)
@@ -82,12 +80,8 @@ def local_correlations(
     rho[:, 1:] += rho_w
 
     if eight_neighbours:
-        rho_d1 = mean(
-            torch.multiply(w_mov[:, 1:, :-1], w_mov[:, :-1, 1:]), axis=0
-        )
-        rho_d2 = mean(
-            torch.multiply(w_mov[:, :-1, :-1], w_mov[:, 1:, 1:,]), axis=0
-        )
+        rho_d1 = mean(torch.multiply(w_mov[:, 1:, :-1], w_mov[:, :-1, 1:]), dim=0)
+        rho_d2 = mean(torch.multiply(w_mov[:, :-1, :-1], w_mov[:, 1:, 1:]), dim=0)
 
         rho[1:, :-1] += rho_d1
         rho[:-1, 1:] += rho_d1
@@ -161,17 +155,16 @@ def max_corr_image(
     bins = np.round(np.linspace(0, T, n_bins + 1)).astype(int)
     # downscale first (entire downscaled movie resides in RAM) then chunk
     if (
-        downscale == 1 or
-        n_bins <= 5 or
-        (isinstance(mov, h5py.Dataset) and mov.compression and not low_memory)
+        downscale == 1
+        or n_bins <= 5
+        or (isinstance(mov, h5py.Dataset) and mov.compression and not low_memory)
     ):
         if downscale > 1:
             mov = downsample_array(mov, factors=downscale, skipna=skipna)
         return np.max(
             [
                 local_correlations(
-                    mov[bins[i]: bins[i + 1]
-                        ], eight_neighbours, device, skipna=skipna
+                    mov[bins[i] : bins[i + 1]], eight_neighbours, device, skipna=skipna
                 )
                 for i in range(n_bins)
             ],
@@ -182,7 +175,7 @@ def max_corr_image(
         ThreadPool().map(
             lambda i: local_correlations(
                 downsample_array(
-                    mov[bins[i] * downscale: bins[i + 1] * downscale],
+                    mov[bins[i] * downscale : bins[i + 1] * downscale],
                     factors=downscale,
                     n_jobs=1,
                     skipna=skipna,
@@ -268,9 +261,7 @@ def max_image(
     """
     if downscale > 1:
         mov = downsample_array(mov, factors=downscale, skipna=skipna)
-    mov = downsample_array(
-        mov, factors=batch_size, strategy="max", skipna=skipna
-    )
+    mov = downsample_array(mov, factors=batch_size, strategy="max", skipna=skipna)
     return np.nanmax(mov, 0) if skipna else mov.max(0)
 
 
@@ -298,8 +289,7 @@ def mean_image(
     """
     if skipna:
         sum, not_nans = (
-            _nan_sum(mov, f, batch_size)
-            for f in (lambda x: x, lambda x: ~np.isnan(x))
+            _nan_sum(mov, f, batch_size) for f in (lambda x: x, lambda x: ~np.isnan(x))
         )
         return sum / not_nans
     d = downsample_array(mov, factors=batch_size)
@@ -341,15 +331,10 @@ def var_image(
         mov = downsample_array(mov, factors=downscale)
     if skipna:
         sum_of_squares, sum, not_nans = (
-            _nan_sum(mov, f, batch_size)
-            for f in (np.square, lambda x: x, lambda x: ~np.isnan(x))
+            _nan_sum(mov, f, batch_size) for f in (np.square, lambda x: x, lambda x: ~np.isnan(x))
         )
-        return sum_of_squares / not_nans - (sum / not_nans)**2
-    d = _downsample_array(
-        mov,
-        fun=lambda x, axis: np.mean(x**2, axis),
-        factors=(batch_size, 1, 1),
-    )
+        return sum_of_squares / not_nans - (sum / not_nans) ** 2
+    d = _downsample_array(mov, fun=lambda x, axis: np.mean(x**2, axis), factors=(batch_size, 1, 1))
     w = np.ones(d.shape[0])
     smaller_last_batch = mov.shape[0] % batch_size
     if smaller_last_batch:
@@ -365,8 +350,9 @@ def _nan_sum(mov, f, batch_size):
     Efficiently applies a specified function `f` to an array `mov`
     and computes the sum along the first axis, ignoring NaN values.
     """
-    return np.nansum(_downsample_array(
-        mov,
-        fun=lambda x, axis: np.nansum(f(x.astype(float)), axis),
-        factors=(batch_size, 1, 1)
-    ), 0)
+    return np.nansum(
+        _downsample_array(
+            mov, fun=lambda x, axis: np.nansum(f(x.astype(float)), axis), factors=(batch_size, 1, 1)
+        ),
+        0,
+    )

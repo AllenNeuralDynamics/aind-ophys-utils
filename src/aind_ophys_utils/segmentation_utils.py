@@ -1,4 +1,4 @@
-""" Reduce per-pixel value maps to per-mask (per-ROI) values """
+"""Reduce per-pixel value maps to per-mask (per-ROI) values"""
 
 import warnings
 from typing import Callable
@@ -54,18 +54,12 @@ def reduce_over_masks(
         spatial dimensions do not match.
     """
     if masks.ndim != 3:
-        raise ValueError(
-            "masks must be 3-D (n_masks, height, width); got "
-            f"{masks.ndim}-D."
-        )
+        raise ValueError(f"masks must be 3-D (n_masks, height, width); got {masks.ndim}-D.")
     if values.ndim != 2:
-        raise ValueError(
-            f"values must be 2-D (height, width); got {values.ndim}-D."
-        )
+        raise ValueError(f"values must be 2-D (height, width); got {values.ndim}-D.")
     if masks.shape[1:] != values.shape:
         raise ValueError(
-            f"masks spatial shape {masks.shape[1:]} does not match "
-            f"values shape {values.shape}."
+            f"masks spatial shape {masks.shape[1:]} does not match values shape {values.shape}."
         )
 
     n_masks = masks.shape[0]
@@ -120,8 +114,7 @@ def roi_probabilities(
         values = np.asarray(probability_map)
         if values.size and (values.min() < 0.0 or values.max() > 1.0):
             warnings.warn(
-                "probability_map has values outside [0, 1] but "
-                "apply_sigmoid is False.",
+                "probability_map has values outside [0, 1] but apply_sigmoid is False.",
                 stacklevel=2,
             )
     return reduce_over_masks(

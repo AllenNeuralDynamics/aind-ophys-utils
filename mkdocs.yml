@@ -1,0 +1,29 @@
+site_name: aind-ophys-utils
+site_description: Python utility library for processing calcium imaging data
+repo_url: https://github.com/AllenNeuralDynamics/aind-ophys-utils
+repo_name: AllenNeuralDynamics/aind-ophys-utils
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+
+nav:
+  - Home: index.md
+  - API Reference:
+    - signal_utils: api/signal_utils.md
+    - dff: api/dff.md
+    - baseline_fitting: api/baseline_fitting.md
+    - summary_images: api/summary_images.md
+    - array_utils: api/array_utils.md
+    - video_utils: api/video_utils.md
+    - motion_border_utils: api/motion_border_utils.md
+    - segmentation_utils: api/segmentation_utils.md

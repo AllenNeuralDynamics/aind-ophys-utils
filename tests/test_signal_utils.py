@@ -1,4 +1,5 @@
 """Tests signal_utils"""
+
 from itertools import chain, product
 
 import numpy as np
@@ -6,6 +7,7 @@ import pytest
 from numpy.testing import assert_allclose, assert_array_almost_equal
 
 from aind_ophys_utils.signal_utils import (
+    fill_nan,
     median_filter,
     nanmedian_filter,
     noise_std,
@@ -86,8 +88,54 @@ def test_median(array, size, expected):
 )
 def test_nanmedian_filter(input, size, expected):
     """Test nanmedian_filter"""
-    output = nanmedian_filter(input, size)
+    with pytest.warns(DeprecationWarning):
+        output = nanmedian_filter(input, size)
     assert_array_almost_equal(expected, output)
+
+
+@pytest.mark.parametrize(
+    "array, size, expected",
+    [
+        # No NaNs: matches median_filter
+        (np.arange(100.0), 5, median_filter(np.arange(100.0), 5)),
+        # size > len(input): scalar broadcast
+        (np.array([1.0, np.nan, 3.0]), 10, np.array([2.0, 2.0, 2.0])),
+        # NaN block narrower than window: rolling fills the gap
+        (
+            np.array([1.0, 2.0, np.nan, 4.0, 5.0]),
+            3,
+            np.array([1.0, 1.5, 3.0, 4.5, 5.0]),
+        ),
+        # NaN block wider than window: NaNs remain (caller's responsibility to fill)
+        (
+            np.array([1.0, np.nan, np.nan, np.nan, np.nan, 5.0]),
+            3,
+            np.array([1.0, 1.0, np.nan, np.nan, 5.0, 5.0]),
+        ),
+        # size == 1: returns copy of input unchanged
+        (np.array([1.0, np.nan, 3.0]), 1, np.array([1.0, np.nan, 3.0])),
+    ],
+)
+def test_median_filter_skipna(array, size, expected):
+    """Test median_filter with skipna=True"""
+    output = median_filter(array, size, skipna=True)
+    np.testing.assert_allclose(output, expected, equal_nan=True)
+
+
+def test_fill_nan():
+    """Test fill_nan interpolates NaN values"""
+    arr = np.array([1.0, np.nan, np.nan, 4.0])
+    output = fill_nan(arr)
+    assert_array_almost_equal(output, [1.0, 2.0, 3.0, 4.0])
+    assert not np.isnan(output).any()
+
+
+def test_fill_nan_all_nan():
+    """fill_nan returns a copy unchanged when all values are NaN."""
+    arr = np.full(5, np.nan)
+    output = fill_nan(arr)
+    assert np.all(np.isnan(output))
+    assert output is not arr
 
 
 @pytest.mark.parametrize(
@@ -101,12 +149,19 @@ def test_nanmedian_filter(input, size, expected):
         (np.array([1]), 0.0, -1),  # Unit
         (np.array([-1, 2, 3]), 1.4826, -1),  # Typical
         (np.random.randn(5, 10000), [1] * 5, -1),  # Typical
-        (np.random.randn(10000, 5), [1] * 5, 0),   # Typical
+        (np.random.randn(10000, 5), [1] * 5, 0),  # Typical
     ],
 )
 def test_robust_std(x, expected, axis):
     """Test robust_std"""
     assert_array_almost_equal(expected, robust_std(x, axis), 1)
+
+
+def test_robust_std_skipna():
+    """robust_std(skipna=True) ignores NaNs; skipna=False returns nan."""
+    x = np.array([-1.0, 2.0, 3.0, np.nan])
+    assert np.isnan(robust_std(x))
+    assert_array_almost_equal(robust_std(x, skipna=True), 1.4826, decimal=1)
 
 
 @pytest.mark.filterwarnings("ignore:nperseg*:UserWarning")
@@ -126,7 +181,7 @@ def test_robust_std(x, expected, axis):
                             np.linspace(0, 100, 200000).reshape(20, 10000)
                         ),
                         [1] * 20,
-                        None
+                        None,
                     ],
                 ],
                 [["welch"], ["mad"], ["fft"]],
@@ -137,8 +192,7 @@ def test_robust_std(x, expected, axis):
 def test_noise_std(x, expected, method, n_jobs):
     """Test noise_std"""
     decimal = 0 if method == "fft" else 1
-    assert_array_almost_equal(
-        expected, noise_std(x, method, n_jobs=n_jobs), decimal)
+    assert_array_almost_equal(expected, noise_std(x, method, n_jobs=n_jobs), decimal)
 
 
 @pytest.mark.parametrize(
@@ -153,3 +207,36 @@ def test_noise_std(x, expected, method, n_jobs):
 def test_noise_std_nan(x, expected):
     """Test noise_std with skipna=True"""
     assert_allclose(noise_std(x, skipna=True), expected, rtol=1e-1, atol=1e-1)
+
+
+@pytest.mark.parametrize("method", ["mad", "fft", "welch"])
+def test_noise_std_skipna_2d(method):
+    """noise_std with skipna=True works on 2D inputs for all methods."""
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal((5, 10000))
+    x_nan = x.copy()
+    x_nan[:, 3000:4000] = np.nan
+    result = noise_std(x_nan, method=method, skipna=True)
+    assert result.shape == (5,)
+    assert_allclose(result, np.ones(5), rtol=0.2, atol=0.2)
+
+
+def test_noise_std_axis():
+    """noise_std with axis=0 on 2D input triggers np.moveaxis."""
+    rng = np.random.default_rng(42)
+    x = rng.standard_normal((10000, 5))
+    result = noise_std(x, axis=0)
+    assert result.shape == (5,)
+    assert_allclose(result, np.ones(5), rtol=0.2, atol=0.2)
+
+
+def test_noise_std_mad_skipna_all_nan():
+    """noise_std method='mad' with all-NaN input returns NaN, not ValueError."""
+    x = np.full(100, np.nan)
+    assert np.isnan(noise_std(x, method="mad", skipna=True))
+
+
+def test_noise_std_fft_skipna_all_nan():
+    """noise_std method='fft' with all-NaN input returns NaN, not ValueError."""
+    x = np.full(100, np.nan)
+    assert np.isnan(noise_std(x, method="fft", skipna=True))

@@ -1,4 +1,5 @@
 """Tests motion_border_utils"""
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,8 +14,7 @@ from aind_ophys_utils.motion_border_utils import (
 
 
 @pytest.mark.parametrize(
-    "motion_correction_data, max_shift,"
-    "expected_max_shift, x_fail, expected_error",
+    "motion_correction_data, max_shift,expected_max_shift, x_fail, expected_error",
     [
         (
             {"x": [None, None], "y": [0.430, 0.321]},
@@ -108,9 +108,7 @@ def test_get_max_correction_border(
             motion_correction_df["y"],
             max_shift=max_shift,
         )
-        np.testing.assert_allclose(
-            np.array(expected_max_shift), np.array(calculated_border)
-        )
+        np.testing.assert_allclose(np.array(expected_max_shift), np.array(calculated_border))
 
 
 @pytest.fixture(scope="session")
@@ -139,9 +137,7 @@ def test_get_max_correction_from_df(sample_dataframe, max_shift, expected):
     """
     Test method to read a MaxFrameShift from a pandas dataframe
     """
-    actual = get_max_correction_from_df(
-        input_df=sample_dataframe, max_shift=max_shift
-    )
+    actual = get_max_correction_from_df(input_df=sample_dataframe, max_shift=max_shift)
 
     np.testing.assert_allclose(np.array(actual), np.array(expected))
 

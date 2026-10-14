@@ -38,9 +38,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         ),
         (
             # first downsample ND array
-            np.array(
-                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
-            ),
+            np.array([[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]),
             (4, 1),
             "first",
             None,
@@ -56,9 +54,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         ),
         (
             # last downsample ND array
-            np.array(
-                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
-            ),
+            np.array([[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]),
             (4, 1),
             "last",
             None,
@@ -74,9 +70,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         ),
         (
             # mid downsample ND array
-            np.array(
-                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
-            ),
+            np.array([[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]),
             (4, 1),
             "middle",
             None,
@@ -108,9 +102,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         ),
         (
             # average downsample ND array
-            np.array(
-                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]
-            ),
+            np.array([[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [5, 8], [11, 12]]),
             (4, 1),
             "average",
             None,
@@ -118,9 +110,7 @@ def test_n_frames_from_hz(input_frame_rate, downsampled_frame_rate, expected):
         ),
         (
             # average downsample ND array that include nan
-            np.array(
-                [[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [np.nan, 8], [11, 12]]
-            ),
+            np.array([[1, 3], [4, 4], [6, 8], [2, 1], [3, 2], [np.nan, 8], [11, 12]]),
             (4, 2),
             "average",
             None,
@@ -290,9 +280,7 @@ def test_downsample_compressed_h5(factors, strategy, chunks, expected):
             array_out = np.array(
                 list(
                     map(
-                        lambda i: f(
-                            i, array.file.filename, array.name, factors, s
-                        ),
+                        lambda i: f(i, array.file.filename, array.name, factors, s),
                         range(0, 100, 50),
                     )
                 )
@@ -382,9 +370,7 @@ def test_nan(array, f, expected):
         ),
     ],
 )
-def test_downsample_exceptions(
-    array, input_fps, output_fps, strategy, expected
-):
+def test_downsample_exceptions(array, input_fps, output_fps, strategy, expected):
     """Test Exception raised by downsample_array"""
     with pytest.raises(ValueError):
         au.downsample_array(
@@ -407,13 +393,11 @@ def test_decimate_video(input_fps):
 
     expected = []
     for i0 in range(0, 71, input_fps):
-        frame = np.mean(video[i0: i0 + input_fps], axis=0)
+        frame = np.mean(video[i0 : i0 + input_fps], axis=0)
         expected.append(frame)
     expected = np.array(expected)
 
-    actual = au.downsample_array(
-        video, factors=input_fps, strategy="average"
-    )
+    actual = au.downsample_array(video, factors=input_fps, strategy="average")
     np.testing.assert_array_equal(expected, actual)
 
 
@@ -436,9 +420,7 @@ def test_decimate_video(input_fps):
 )
 def test_normalize_array(array, lower_cutoff, upper_cutoff, expected):
     """Test normalize_array"""
-    normalized = au.normalize_array(
-        array, lower_cutoff=lower_cutoff, upper_cutoff=upper_cutoff
-    )
+    normalized = au.normalize_array(array, lower_cutoff=lower_cutoff, upper_cutoff=upper_cutoff)
     np.testing.assert_array_equal(normalized, expected)
     assert normalized.dtype == np.uint8
 
@@ -526,33 +508,25 @@ def test_scale_to_uint8(input_array, expected_array):
             20.0,
             61.0,
             np.int32,
-            np.array(
-                [-2147483648, -2147483648, -890420049, 2147483647, 2147483647]
-            ),
+            np.array([-2147483648, -2147483648, -890420049, 2147483647, 2147483647]),
         ),
         (
             np.array([2, 11, 32, 78, 99]),
             10.0,
             None,
             np.int32,
-            np.array(
-                [-2147483648, -2099225589, -1085806339, 1134064398, 2147483647]
-            ),
+            np.array([-2147483648, -2099225589, -1085806339, 1134064398, 2147483647]),
         ),
         (
             np.array([2, 11, 32, 78, 99]),
             None,
             61.0,
             np.int32,
-            np.array(
-                [-2147483648, -1492319145, 36398027, 2147483647, 2147483647]
-            ),
+            np.array([-2147483648, -1492319145, 36398027, 2147483647, 2147483647]),
         ),
     ],
 )
-def test_scale_to_other_types(
-    input_array, lower, upper, input_dtype, expected
-):
+def test_scale_to_other_types(input_array, lower, upper, input_dtype, expected):
     """
     Test that normalize_array works for datatypes other than np.uint8
     """

@@ -1,4 +1,5 @@
-""" Utils to get motion borders """
+"""Utils to get motion borders"""
+
 from collections import namedtuple
 
 import numpy as np
@@ -9,9 +10,7 @@ import pandas as pd
 
 MaxFrameShift = namedtuple("MaxFrameShift", ["left", "right", "up", "down"])
 
-MotionBorder = namedtuple(
-    "MotionBorder", ["top", "bottom", "left_side", "right_side"]
-)
+MotionBorder = namedtuple("MotionBorder", ["top", "bottom", "left_side", "right_side"])
 
 
 def get_max_correction_values(
@@ -46,37 +45,29 @@ def get_max_correction_values(
     # directions
     max_shift = abs(max_shift)
 
-    # filter based out analomies based on maximum_shift
-    x_no_outliers = x_series[
-        (x_series >= -max_shift) & (x_series <= max_shift)
-    ]
-    y_no_outliers = y_series[
-        (y_series >= -max_shift) & (y_series <= max_shift)
-    ]
+    # filter out anomalies based on maximum_shift
+    x_no_outliers = x_series[(x_series >= -max_shift) & (x_series <= max_shift)]
+    y_no_outliers = y_series[(y_series >= -max_shift) & (y_series <= max_shift)]
     # calculate max border shifts
     right_shift = -1 * x_no_outliers.min()
     left_shift = x_no_outliers.max()
     down_shift = -1 * y_no_outliers.min()
     up_shift = y_no_outliers.max()
 
-    max_shift = MaxFrameShift(
-        left=left_shift, right=right_shift, up=up_shift, down=down_shift
-    )
+    frame_shift = MaxFrameShift(left=left_shift, right=right_shift, up=up_shift, down=down_shift)
 
     # check if all exist
-    if np.any(np.isnan(np.array(max_shift))):
+    if np.any(np.isnan(np.array(frame_shift))):
         raise ValueError(
             "One or more motion correction shifts "
             "was found to be Nan, max shift found: "
-            f"{max_shift}, with max_shift {max_shift}"
+            f"{frame_shift}, with max_shift {max_shift}"
         )
 
-    return max_shift
+    return frame_shift
 
 
-def get_max_correction_from_df(
-    input_df: pd.DataFrame, max_shift: float = 30.0
-) -> MaxFrameShift:
+def get_max_correction_from_df(input_df: pd.DataFrame, max_shift: float = 30.0) -> MaxFrameShift:
     """
 
     Parameters
