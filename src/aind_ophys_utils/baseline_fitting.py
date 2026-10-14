@@ -323,7 +323,8 @@ def nonlinear_fit(  # noqa: C901
         Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
     optimizer_options : dict or None
         Options forwarded to ``scipy.optimize.minimize``. ``None`` (default)
-        uses scipy's own ``"L-BFGS-B"`` defaults.
+        uses the selected optimizer's defaults. With the default
+        ``optimizer="L-BFGS-B"``, this uses scipy's own L-BFGS-B defaults.
     backend : {"numpy", "jax"}
         Numerical backend. ``"jax"`` enables automatic differentiation and
         JIT compilation; ``"numpy"`` uses model-bundled Jacobians when
@@ -849,7 +850,8 @@ def fit_baseline(
         Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
     optimizer_options : dict or None
         Options forwarded to ``scipy.optimize.minimize``. ``None`` (default)
-        uses scipy's own ``"L-BFGS-B"`` defaults.
+        uses the selected optimizer's defaults. With the default
+        ``optimizer="L-BFGS-B"``, this uses scipy's own L-BFGS-B defaults.
     backend : {"numpy", "jax"}
         Backend for the trend fit. ``"jax"`` enables autodiff and JIT
         compilation; ``"numpy"`` uses analytic Jacobians when available.
