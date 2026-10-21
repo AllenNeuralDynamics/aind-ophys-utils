@@ -366,6 +366,12 @@ class TestNonlinearFitSigmaAnneal:
         y, t, _, sd = _high_activity_trace(0.60, amp=8.0, true_params=_DECAY_PARAMS)
         assert not np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 2, sd), atol=1e-6 * sd)
 
+    @pytest.mark.parametrize("steps", [0, -3])
+    def test_non_positive_steps_equal_steps_one(self, steps):
+        """Zero or negative step counts are treated as 1 (no ramp)."""
+        y, t, _, sd = _high_activity_trace(0.60, amp=8.0, true_params=_DECAY_PARAMS)
+        assert np.array_equal(self._fit(y, t, steps, sd), self._fit(y, t, 1, sd))
+
     def test_easy_regime_unaffected_by_anneal_steps(self):
         """Sparse activity: annealing and single-jump converge to the same fit."""
         y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
