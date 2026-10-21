@@ -298,9 +298,9 @@ def nonlinear_fit(  # noqa: C901
 
         1. OLS pre-pass — unweighted (or ``weights``-weighted) least squares.
         2. Annealing — over the first ``sigma_anneal_steps`` IRLS iterations
-           (skipped for ``sigma_anneal_steps=1``) the scale follows a geometric ramp from ``max(fixed_sigma, MAD)`` (the
-           MAD of the OLS residuals, floored at the target) down to
-           ``fixed_sigma``. Starting loose and tightening gradually keeps the
+           (skipped for ``sigma_anneal_steps=1``) the scale follows a
+           geometric ramp from ``max(fixed_sigma, MAD)`` (the MAD of the OLS
+           residuals, floored at the target) down to ``fixed_sigma``. Starting loose and tightening gradually keeps the
            non-convex M-estimator out of the bad local minimum it falls into
            when the trend must drop below heavy one-sided activity.
         3. Remaining IRLS iterations — held at ``fixed_sigma``.
