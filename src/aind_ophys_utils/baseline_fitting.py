@@ -324,8 +324,9 @@ def nonlinear_fit(  # noqa: C901
     optimizer : str
         Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
     optimizer_options : dict or None
-        Options forwarded to ``scipy.optimize.minimize``.
-        Defaults to ``{"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}``.
+        Options forwarded to ``scipy.optimize.minimize``. ``None`` (default)
+        uses the selected optimizer's defaults. With the default
+        ``optimizer="L-BFGS-B"``, this uses scipy's own L-BFGS-B defaults.
     backend : {"numpy", "jax"}
         Numerical backend. ``"jax"`` enables automatic differentiation and
         JIT compilation; ``"numpy"`` uses model-bundled Jacobians when
@@ -361,9 +362,6 @@ def nonlinear_fit(  # noqa: C901
     degenerate solution (often the parameter bounds) instead of raising or
     warning. A ``UserWarning`` names how many samples were dropped.
     """
-    if optimizer_options is None:
-        optimizer_options = {"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}
-
     # ----------------------------
     # Guard against non-finite samples (see Notes). `t`/`trace`/`weights`
     # are reassigned in place so Stages 1-3 below already see the filtered
@@ -884,8 +882,9 @@ def fit_baseline(
     optimizer : str
         Solver passed to ``scipy.optimize.minimize``, default ``"L-BFGS-B"``.
     optimizer_options : dict or None
-        Options forwarded to ``scipy.optimize.minimize``.
-        Defaults to ``{"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}``.
+        Options forwarded to ``scipy.optimize.minimize``. ``None`` (default)
+        uses the selected optimizer's defaults. With the default
+        ``optimizer="L-BFGS-B"``, this uses scipy's own L-BFGS-B defaults.
     backend : {"numpy", "jax"}
         Backend for the trend fit. ``"jax"`` enables autodiff and JIT
         compilation; ``"numpy"`` uses analytic Jacobians when available.
