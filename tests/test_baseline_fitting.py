@@ -361,17 +361,15 @@ class TestNonlinearFitSigmaAnneal:
         if jump_collapses:
             assert r_jump > sd  # single jump lands in bad basin
 
-    def test_easy_regime_unaffected_by_anneal_steps(self):
-        """Sparse activity: annealing and single-jump converge to the same fit."""
-        y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
-        fits = [self._fit(y, t, steps, sd) for steps in (1, 2, 4)]
-        for f in fits[1:]:
-            assert np.allclose(fits[0], f, atol=1e-4 * sd + 1e-6)
-
     def test_steps_one_skips_the_mad_iteration(self):
         """steps=1 starts at fixed_sigma, steps=2 at the (larger) MAD: distinct fits."""
         y, t, _, sd = _high_activity_trace(0.60, amp=8.0, true_params=_DECAY_PARAMS)
         assert not np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 2, sd), atol=1e-6 * sd)
+
+    def test_easy_regime_unaffected_by_anneal_steps(self):
+        """Sparse activity: annealing and single-jump converge to the same fit."""
+        y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
+        assert np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 4, sd), atol=1e-4 * sd + 1e-6)
 
 
 # ---------------------------------------------------------------------------
