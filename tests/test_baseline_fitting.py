@@ -316,7 +316,7 @@ class TestNonlinearFitSigmaAnneal:
 
     Coverage of the annealing code is already provided by the round-2/MAD-sigma
     tests; these assert the *behaviour* — that annealing recovers the baseline
-    where the legacy single jump (steps=1) does not, and that turning it on by
+    where the single jump (steps=2) does not, and that turning it on by
     default leaves the low-activity regime unchanged.
     """
 
@@ -354,12 +354,23 @@ class TestNonlinearFitSigmaAnneal:
         y, t, base, sd = _high_activity_trace(act, amp=8.0, true_params=params)
         rmse = lambda f: float(np.sqrt(np.mean((f - base) ** 2)))  # noqa: E731
         r_anneal = rmse(self._fit(y, t, 4, sd))
-        r_jump = rmse(self._fit(y, t, 1, sd))
+        r_jump = rmse(self._fit(y, t, 2, sd))
         assert r_anneal < sd  # annealing recovers the truth
         # never worse than the jump, tolerant of optimizer/BLAS jitter (~1e-9)
         assert r_anneal <= r_jump + 1e-6 * sd + 1e-9
         if jump_collapses:
             assert r_jump > sd  # single jump lands in bad basin
+
+    def test_steps_one_skips_the_mad_iteration(self):
+        """steps=1 starts at fixed_sigma, steps=2 at the (larger) MAD: distinct fits."""
+        y, t, _, sd = _high_activity_trace(0.60, amp=8.0, true_params=_DECAY_PARAMS)
+        assert not np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 2, sd), atol=1e-6 * sd)
+
+    @pytest.mark.parametrize("steps", [0, -3])
+    def test_non_positive_steps_equal_steps_one(self, steps):
+        """Zero or negative step counts are treated as 1 (no ramp)."""
+        y, t, _, sd = _high_activity_trace(0.60, amp=8.0, true_params=_DECAY_PARAMS)
+        assert np.array_equal(self._fit(y, t, steps, sd), self._fit(y, t, 1, sd))
 
     def test_easy_regime_unaffected_by_anneal_steps(self):
         """Sparse activity: annealing and single-jump converge to the same fit."""
