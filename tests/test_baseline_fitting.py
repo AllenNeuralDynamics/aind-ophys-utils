@@ -316,7 +316,7 @@ class TestNonlinearFitSigmaAnneal:
 
     Coverage of the annealing code is already provided by the round-2/MAD-sigma
     tests; these assert the *behaviour* — that annealing recovers the baseline
-    where the legacy single jump (steps=0) does not, and that turning it on by
+    where the single jump (steps=2) does not, and that turning it on by
     default leaves the low-activity regime unchanged.
     """
 
@@ -353,8 +353,8 @@ class TestNonlinearFitSigmaAnneal:
         """Annealing recovers the truth and is never worse than the single jump."""
         y, t, base, sd = _high_activity_trace(act, amp=8.0, true_params=params)
         rmse = lambda f: float(np.sqrt(np.mean((f - base) ** 2)))  # noqa: E731
-        r_anneal = rmse(self._fit(y, t, 2, sd))
-        r_jump = rmse(self._fit(y, t, 0, sd))
+        r_anneal = rmse(self._fit(y, t, 4, sd))
+        r_jump = rmse(self._fit(y, t, 2, sd))
         assert r_anneal < sd  # annealing recovers the truth
         # never worse than the jump, tolerant of optimizer/BLAS jitter (~1e-9)
         assert r_anneal <= r_jump + 1e-6 * sd + 1e-9
@@ -364,7 +364,14 @@ class TestNonlinearFitSigmaAnneal:
     def test_easy_regime_unaffected_by_anneal_steps(self):
         """Sparse activity: annealing and single-jump converge to the same fit."""
         y, t, _, sd = _high_activity_trace(0.10, amp=6.0)
-        assert np.allclose(self._fit(y, t, 0, sd), self._fit(y, t, 2, sd), atol=1e-4 * sd + 1e-6)
+        fits = [self._fit(y, t, steps, sd) for steps in (1, 2, 4)]
+        for f in fits[1:]:
+            assert np.allclose(fits[0], f, atol=1e-4 * sd + 1e-6)
+
+    def test_steps_one_skips_the_mad_iteration(self):
+        """steps=1 starts at fixed_sigma, steps=2 at the (larger) MAD: distinct fits."""
+        y, t, _, sd = _high_activity_trace(0.60, amp=8.0, true_params=_DECAY_PARAMS)
+        assert not np.allclose(self._fit(y, t, 1, sd), self._fit(y, t, 2, sd), atol=1e-6 * sd)
 
 
 # ---------------------------------------------------------------------------
