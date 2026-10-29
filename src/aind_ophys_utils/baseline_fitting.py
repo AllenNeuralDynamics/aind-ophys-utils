@@ -344,8 +344,8 @@ def nonlinear_fit(  # noqa: C901
         additional attributes ``res.sigma`` (float, robust scale estimate)
         and ``res.weights`` (np.ndarray, M-estimator weights), set only when
         ``M`` is not ``None``. If any samples were dropped (see Notes),
-        these correspond to the samples actually used for fitting, not the
-        original length.
+        ``res.weights`` is still the original length, with weight 0 at the
+        dropped samples, so it stays aligned with the input ``trace``/``t``.
 
     Raises
     ------
@@ -552,6 +552,13 @@ def nonlinear_fit(  # noqa: C901
         u = (np.array(y_) - fitted) / float(_sigma)
         res.weights = np.array(M.weights(u))
     if _dropped:
+        if M is not None:
+            # Scatter back to the input length (0 at dropped samples) so the
+            # weights stay aligned with the original trace/t, e.g. when
+            # fit_baseline forwards them to the fluctuation stage.
+            w_full = np.zeros(t_orig.shape[0])
+            w_full[_valid] = res.weights
+            res.weights = w_full
         # Evaluate at the original t, not the filtered one, so `fitted`
         # matches the input shape (see Returns). NaN is forced explicitly
         # rather than left to `model`: some models are NaN-safe at t=inf

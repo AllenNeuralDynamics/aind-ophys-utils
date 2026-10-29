@@ -730,9 +730,9 @@ class TestNonlinearFitNonFiniteGuard:
         assert not any("non-finite" in str(w.message) for w in recwarn.list)
         assert np.allclose(res.x, true, atol=2.0)
 
-    def test_irls_weights_and_sigma_use_filtered_length(self):
-        """res.weights/res.sigma correspond to the samples actually fit, not
-        the original (pre-drop) length -- documented, not accidental."""
+    def test_irls_weights_keep_input_length(self):
+        """res.weights has the input length, with 0 at dropped samples, so it
+        stays aligned with the original trace/t."""
         y, t, true = _decay_trace(noise_sd=0.3)
         y = y.copy()
         y[[3, 4]] = np.nan
@@ -743,8 +743,26 @@ class TestNonlinearFitNonFiniteGuard:
                 y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.3
             )
         assert fitted.shape == y.shape
-        assert res.weights.shape[0] == len(y) - 2
+        assert res.weights.shape == y.shape
+        assert np.all(res.weights[[3, 4]] == 0)
+        assert np.all(res.weights[np.isfinite(y)] > 0)
         assert np.allclose(res.x, true, atol=2.0)
+
+    def test_fit_baseline_with_dropped_samples(self):
+        """fit_baseline forwards res.weights to the fluctuation stage; a dropped
+        trend-fit sample must not cause a shape mismatch there."""
+        y, t, _ = _decay_trace(noise_sd=0.5, T=300)
+        y = y.copy()
+        y[150] = np.nan
+        x0 = np.array([1.0, 1.0, 50.0])
+        M = AsymmetricTukeyBiweight()
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            F0, F0trend, res, info = fit_baseline(
+                y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.5, window=10.0
+            )
+        assert F0.shape == y.shape
+        assert F0trend.shape == y.shape
+        assert res.weights.shape == y.shape
 
     def test_jax_backend_respects_guard(self):
         """The guard and the original-t reconstruction both work on the JAX
