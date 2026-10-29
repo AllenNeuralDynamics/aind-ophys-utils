@@ -6,6 +6,7 @@ Also exposes a robust LOWESS smoother and a plotting helper.
 """
 
 import inspect
+import warnings
 from functools import partial
 from typing import Callable, Literal
 
@@ -335,15 +336,58 @@ def nonlinear_fit(  # noqa: C901
     Returns
     -------
     fitted : np.ndarray
-        Model prediction at the converged parameters, shape ``(N,)``.
+        Model prediction at the converged parameters, shape ``(N,)`` -- same
+        length as the input ``t``, even if some samples were dropped (see
+        Notes). Entries at any originally-non-finite ``t`` are ``NaN``.
     res : OptimizeResult
         Result from the final ``scipy.optimize.minimize`` call, with
         additional attributes ``res.sigma`` (float, robust scale estimate)
-        and ``res.weights`` (np.ndarray, shape ``(N,)``, M-estimator weights),
-        set only when ``M`` is not ``None``.
+        and ``res.weights`` (np.ndarray, M-estimator weights), set only when
+        ``M`` is not ``None``. If any samples were dropped (see Notes),
+        ``res.weights`` is still the original length, with weight 0 at the
+        dropped samples, so it stays aligned with the input ``trace``/``t``.
+
+    Raises
+    ------
+    ValueError
+        If every sample is non-finite, so there is nothing left to fit.
+
+    Notes
+    -----
+    A non-finite ``trace``, ``t``, or ``weights`` sample is dropped before
+    fitting -- otherwise it poisons the scalar loss to NaN for every
+    candidate parameter vector, and the optimizer silently lands on a
+    degenerate solution (often the parameter bounds) instead of raising or
+    warning. A ``UserWarning`` names how many samples were dropped.
     """
     if optimizer_options is None:
         optimizer_options = {"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}
+
+    # ----------------------------
+    # Guard against non-finite samples (see Notes). `t`/`trace`/`weights`
+    # are reassigned in place so Stages 1-3 below already see the filtered
+    # data; `t_orig` is kept to evaluate and shape the returned `fitted`
+    # against the original input.
+    # ----------------------------
+    t_orig = np.asarray(t)
+    _valid = np.isfinite(np.asarray(trace)) & np.isfinite(t_orig)
+    if weights is not None:
+        _valid &= np.isfinite(np.asarray(weights))
+    _dropped = not bool(_valid.all())
+    if _dropped:
+        if not _valid.any():
+            raise ValueError(
+                "nonlinear_fit: every sample is non-finite (trace/t/weights) -- nothing to fit."
+            )
+        warnings.warn(
+            f"nonlinear_fit: dropping {int((~_valid).sum())} non-finite "
+            "sample(s) (trace, t, or weights) before fitting.",
+            stacklevel=2,
+        )
+        trace = np.asarray(trace)[_valid]
+        t = t_orig[_valid]
+        if weights is not None:
+            weights = np.asarray(weights)[_valid]
 
     use_jax = backend == "jax"
     if use_jax:
@@ -507,6 +551,26 @@ def nonlinear_fit(  # noqa: C901
         res.sigma = float(_sigma)
         u = (np.array(y_) - fitted) / float(_sigma)
         res.weights = np.array(M.weights(u))
+    if _dropped:
+        if M is not None:
+            # Scatter back to the input length (0 at dropped samples) so the
+            # weights stay aligned with the original trace/t, e.g. when
+            # fit_baseline forwards them to the fluctuation stage.
+            w_full = np.zeros(t_orig.shape[0])
+            w_full[_valid] = res.weights
+            res.weights = w_full
+        # Evaluate at the finite original t, including samples dropped only
+        # because of a bad trace/weights value, so `fitted` matches the input
+        # shape (see Returns). Non-finite t are never passed to `model`: some
+        # models are NaN-safe at t=inf (e.g. sum_of_exps' exp(-inf) = 0) and
+        # would silently return a value for a time we don't know, while
+        # others (e.g. using `t - t.mean()`) would turn every prediction NaN.
+        _finite_t = np.isfinite(t_orig)
+        t_eval = t_orig[_finite_t]
+        t_eval = jnp.asarray(t_eval, dtype=dtype) if use_jax else t_eval
+        pred = np.array(model(x, t_eval))
+        fitted = np.full(t_orig.shape, np.nan, dtype=pred.dtype)
+        fitted[_finite_t] = pred
     return fitted, res
 
 

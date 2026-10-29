@@ -674,3 +674,140 @@ class TestRobustLowessEdgeCases:
         _, _, sigma = robust_lowess(y, t, frac=0.1, M=M, maxiter=1)
         # sigma may be 0 or a tiny float (numerical noise) — the branch was taken.
         assert sigma is not None and abs(sigma) < 1e-10
+
+
+# ---------------------------------------------------------------------------
+# 12. nonlinear_fit — non-finite input guard
+# ---------------------------------------------------------------------------
+
+
+class TestNonlinearFitNonFiniteGuard:
+    """A NaN/Inf anywhere in trace/t/weights must not silently poison the fit."""
+
+    @pytest.mark.parametrize("bad_value", [np.nan, np.inf])
+    @pytest.mark.parametrize("field", ["trace", "t", "weights"])
+    def test_single_non_finite_value_dropped(self, field, bad_value):
+        """A single non-finite trace/t/weights sample is dropped before
+        fitting, with a UserWarning naming the count.
+
+        `fitted` depends only on `t` and the fitted params, not on `trace`
+        or `weights` -- so a bad `t` is the only case where NaN can appear
+        in the output, and only at that exact position; a bad `trace` or
+        `weights` sample alone leaves `fitted` fully finite everywhere.
+        """
+        y, t, true = _decay_trace()
+        y, t = y.copy(), t.copy()
+        w = np.ones_like(y)
+        bad_idx = 10
+        {"trace": y, "t": t, "weights": w}[field][bad_idx] = bad_value
+
+        x0 = np.array([1.0, 1.0, 50.0])
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy", weights=w)
+
+        assert fitted.shape == y.shape
+        if field == "t":
+            assert np.isnan(fitted[bad_idx])
+            assert np.all(np.isfinite(np.delete(fitted, bad_idx)))
+        else:
+            assert np.all(np.isfinite(fitted))
+        assert np.allclose(res.x, true, atol=2.0)
+
+    def test_model_never_sees_non_finite_t(self):
+        """The reconstruction evaluates `model` only at finite original t, so a
+        model that uses a global statistic of `t` (e.g. its mean) is not
+        turned entirely NaN by one bad timestamp."""
+        y, t, _ = _decay_trace()
+        t = t.copy()
+        bad_idx = 10
+        t[bad_idx] = np.nan
+        seen = []
+
+        def centered_exp(x, t):
+            seen.append(np.asarray(t))
+            tc = t - np.mean(t)
+            return x[0] + x[1] * np.exp(-(tc + 200.0) / x[2])
+
+        x0 = np.array([1.0, 1.0, 50.0])
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            fitted, _ = nonlinear_fit(y, t, centered_exp, x0, backend="numpy")
+        assert all(np.all(np.isfinite(s)) for s in seen)
+        assert np.isnan(fitted[bad_idx])
+        assert np.all(np.isfinite(np.delete(fitted, bad_idx)))
+
+    def test_fitted_includes_samples_dropped_only_for_bad_trace(self):
+        """A sample dropped because of a bad trace value (finite t) still gets
+        a model prediction in `fitted`."""
+        y, t, _ = _decay_trace()
+        y = y.copy()
+        y[10] = np.nan
+        x0 = np.array([1.0, 1.0, 50.0])
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
+        assert np.all(np.isfinite(fitted))
+        assert np.allclose(fitted[10], sum_of_exps(res.x, t[10:11])[0])
+
+    def test_all_non_finite_raises(self):
+        """Nothing left to fit → a clear ValueError, not a cryptic failure
+        downstream in the optimizer."""
+        y, t, _ = _decay_trace(T=10)
+        y = np.full_like(y, np.nan)
+        x0 = np.array([1.0, 1.0, 50.0])
+        with pytest.raises(ValueError, match="nothing to fit"):
+            nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
+
+    def test_no_warning_when_all_finite(self, recwarn):
+        """No behavior change (and no warning) for well-formed input."""
+        y, t, true = _decay_trace()
+        x0 = np.array([1.0, 1.0, 50.0])
+        fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
+        assert not any("non-finite" in str(w.message) for w in recwarn.list)
+        assert np.allclose(res.x, true, atol=2.0)
+
+    def test_irls_weights_keep_input_length(self):
+        """res.weights has the input length, with 0 at dropped samples, so it
+        stays aligned with the original trace/t."""
+        y, t, true = _decay_trace(noise_sd=0.3)
+        y = y.copy()
+        y[[3, 4]] = np.nan
+        x0 = np.array([1.0, 1.0, 50.0])
+        M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
+        with pytest.warns(UserWarning, match="dropping 2 non-finite"):
+            fitted, res = nonlinear_fit(
+                y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.3
+            )
+        assert fitted.shape == y.shape
+        assert res.weights.shape == y.shape
+        assert np.all(res.weights[[3, 4]] == 0)
+        assert np.all(res.weights[np.isfinite(y)] > 0)
+        assert np.allclose(res.x, true, atol=2.0)
+
+    def test_fit_baseline_with_dropped_samples(self):
+        """fit_baseline forwards res.weights to the fluctuation stage; a dropped
+        trend-fit sample must not cause a shape mismatch there."""
+        y, t, _ = _decay_trace(noise_sd=0.5, T=300)
+        y = y.copy()
+        y[150] = np.nan
+        x0 = np.array([1.0, 1.0, 50.0])
+        M = AsymmetricTukeyBiweight()
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            F0, F0trend, res, info = fit_baseline(
+                y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.5, window=10.0
+            )
+        assert F0.shape == y.shape
+        assert F0trend.shape == y.shape
+        assert res.weights.shape == y.shape
+
+    def test_jax_backend_respects_guard(self):
+        """The guard and the original-t reconstruction both work on the JAX
+        backend too, not just numpy."""
+        y, t, true = _decay_trace()
+        t = t.copy()
+        bad_idx = [15]
+        t[bad_idx] = np.nan
+        x0 = np.array([1.0, 1.0, 50.0])
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="jax", dtype=jnp.float64)
+        assert fitted.shape == y.shape
+        assert np.all(np.isnan(fitted[bad_idx]))
+        assert np.allclose(res.x, true, atol=2.0)
