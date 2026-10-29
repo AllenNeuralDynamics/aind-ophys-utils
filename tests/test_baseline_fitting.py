@@ -713,6 +713,40 @@ class TestNonlinearFitNonFiniteGuard:
             assert np.all(np.isfinite(fitted))
         assert np.allclose(res.x, true, atol=2.0)
 
+    def test_model_never_sees_non_finite_t(self):
+        """The reconstruction evaluates `model` only at finite original t, so a
+        model that uses a global statistic of `t` (e.g. its mean) is not
+        turned entirely NaN by one bad timestamp."""
+        y, t, _ = _decay_trace()
+        t = t.copy()
+        bad_idx = 10
+        t[bad_idx] = np.nan
+        seen = []
+
+        def centered_exp(x, t):
+            seen.append(np.asarray(t))
+            tc = t - np.mean(t)
+            return x[0] + x[1] * np.exp(-(tc + 200.0) / x[2])
+
+        x0 = np.array([1.0, 1.0, 50.0])
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            fitted, _ = nonlinear_fit(y, t, centered_exp, x0, backend="numpy")
+        assert all(np.all(np.isfinite(s)) for s in seen)
+        assert np.isnan(fitted[bad_idx])
+        assert np.all(np.isfinite(np.delete(fitted, bad_idx)))
+
+    def test_fitted_includes_samples_dropped_only_for_bad_trace(self):
+        """A sample dropped because of a bad trace value (finite t) still gets
+        a model prediction in `fitted`."""
+        y, t, _ = _decay_trace()
+        y = y.copy()
+        y[10] = np.nan
+        x0 = np.array([1.0, 1.0, 50.0])
+        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
+            fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
+        assert np.all(np.isfinite(fitted))
+        assert np.allclose(fitted[10], sum_of_exps(res.x, t[10:11])[0])
+
     def test_all_non_finite_raises(self):
         """Nothing left to fit → a clear ValueError, not a cryptic failure
         downstream in the optimizer."""

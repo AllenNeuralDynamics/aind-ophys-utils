@@ -559,15 +559,18 @@ def nonlinear_fit(  # noqa: C901
             w_full = np.zeros(t_orig.shape[0])
             w_full[_valid] = res.weights
             res.weights = w_full
-        # Evaluate at the original t, not the filtered one, so `fitted`
-        # matches the input shape (see Returns). NaN is forced explicitly
-        # rather than left to `model`: some models are NaN-safe at t=inf
-        # (e.g. sum_of_exps' exp(-inf) = 0, decaying to a finite asymptote)
-        # and would otherwise silently return a value for a time we don't
-        # actually know.
-        t_full = jnp.asarray(t_orig, dtype=dtype) if use_jax else t_orig
-        fitted = np.array(model(x, t_full))
-        fitted[~np.isfinite(t_orig)] = np.nan
+        # Evaluate at the finite original t, including samples dropped only
+        # because of a bad trace/weights value, so `fitted` matches the input
+        # shape (see Returns). Non-finite t are never passed to `model`: some
+        # models are NaN-safe at t=inf (e.g. sum_of_exps' exp(-inf) = 0) and
+        # would silently return a value for a time we don't know, while
+        # others (e.g. using `t - t.mean()`) would turn every prediction NaN.
+        _finite_t = np.isfinite(t_orig)
+        t_eval = t_orig[_finite_t]
+        t_eval = jnp.asarray(t_eval, dtype=dtype) if use_jax else t_eval
+        pred = np.array(model(x, t_eval))
+        fitted = np.full(t_orig.shape, np.nan, dtype=pred.dtype)
+        fitted[_finite_t] = pred
     return fitted, res
 
 
