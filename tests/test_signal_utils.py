@@ -248,3 +248,11 @@ def test_noise_std_fft_torch_matches_scipy():
     np.testing.assert_allclose(
         noise_std(x[0], method="fft", device="cpu"), noise_std(x[0], method="fft"), rtol=1e-5
     )
+
+
+def test_noise_std_fft_2d_matches_rows():
+    """2-D input gives the per-row result (the noise band was sliced by row count)."""
+    x = np.random.default_rng(0).normal(size=(6, 2000))
+    np.testing.assert_allclose(
+        noise_std(x, method="fft"), [noise_std(row, method="fft") for row in x], rtol=1e-5
+    )
