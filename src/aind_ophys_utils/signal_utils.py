@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import scipy
 import scipy.ndimage
-import torch
 from scipy import signal
 
 
@@ -328,7 +327,7 @@ def noise_std(  # noqa: C901
     filter_length: int = 31,
     axis: int = -1,
     n_jobs: int | None = None,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str | None = None,
     skipna: bool = False,
 ) -> float | np.ndarray:
     """Estimate the standard deviation of the noise in input(s) `x`.
@@ -361,8 +360,9 @@ def noise_std(  # noqa: C901
         The default is over the last axis (i.e. ``axis=-1``).
     n_jobs: int | None
         The number of jobs to run in parallel.
-    device: str, default is 'cuda' if GPU is available.
-        Device to use when using FFT method; 'cuda' or 'cpu'.
+    device: str, optional
+        Torch device for method 'fft' (the only method that needs torch);
+        default is 'cuda' if a GPU is available, else 'cpu'.
     skipna: bool
         Exclude NaN values when computing the result. For ``method='mad'``,
         NaN frames are dropped after subtracting the median-filtered baseline.
@@ -441,7 +441,8 @@ def noise_std(  # noqa: C901
                 res = ThreadPool(n_jobs).map(signal.welch, x)
                 ff = res[0][0]
                 psd = np.array([r[1] for r in res])
-            psd = torch.tensor(psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
+            psd = psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])] / 2
+            noise = np.sqrt(np.mean(psd, -1))
         else:
             if skipna:
                 if x.ndim > 1:
@@ -464,9 +465,13 @@ def noise_std(  # noqa: C901
                 T = x.shape[-1]
                 if T == 0:
                     return np.nan
+            import torch  # optional: only the fft method needs it
+
+            if device is None:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
             x_torch = torch.tensor(x.astype(np.float32), device=device)
             xdft = torch.fft.rfft(x_torch, axis=-1)
             xdft = xdft[..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))]
             psd = abs(xdft) ** 2 / T
-        noise = torch.sqrt(torch.mean(psd, -1)).cpu()
-        return noise.item() if noise.dim() == 0 else noise.numpy()
+            noise = torch.sqrt(torch.mean(psd, -1)).cpu().numpy()
+        return noise.item() if noise.ndim == 0 else noise

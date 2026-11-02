@@ -3,14 +3,16 @@
 Provides M-estimator norms (Tukey biweight variants) and the
 ``nonlinear_fit`` IRLS routine used to fit parametric bleach baselines.
 Also exposes a robust LOWESS smoother and a plotting helper.
+
+JAX is only needed for ``backend="jax"`` and is imported on first use.
 """
+
+from __future__ import annotations
 
 import inspect
 from functools import partial
-from typing import Callable, Literal
+from typing import TYPE_CHECKING, Callable, Literal
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 from scipy.optimize import OptimizeResult, brentq, minimize
 from statsmodels.nonparametric._smoothers_lowess import lowess as _sm_lowess
@@ -19,7 +21,17 @@ from statsmodels.robust.norms import RobustNorm
 
 from aind_ophys_utils.signal_utils import percentile_filter
 
-jax.config.update("jax_enable_x64", True)
+if TYPE_CHECKING:
+    import jax
+
+
+def _import_jax():
+    """Import JAX on first use, enabling 64-bit floats."""
+    import jax
+    import jax.numpy as jnp
+
+    jax.config.update("jax_enable_x64", True)
+    return jax, jnp
 
 
 # -----------------------------
@@ -244,7 +256,7 @@ def nonlinear_fit(  # noqa: C901
     optimizer_options: dict | None = None,
     # --- backend ---
     backend: Literal["numpy", "jax"] = "numpy",
-    dtype=jnp.float64,
+    dtype=None,
 ) -> tuple[np.ndarray, OptimizeResult]:
     """
     Fit a nonlinear model to a 1-D trace using OLS or robust IRLS.
@@ -328,9 +340,9 @@ def nonlinear_fit(  # noqa: C901
         Numerical backend. ``"jax"`` enables automatic differentiation and
         JIT compilation; ``"numpy"`` uses model-bundled Jacobians when
         available.
-    dtype : jax dtype
+    dtype : jax dtype, optional
         Floating-point precision for the JAX backend, default
-        ``jnp.float64``. Requires ``jax_enable_x64=True``.
+        ``jnp.float64``.
 
     Returns
     -------
@@ -347,6 +359,8 @@ def nonlinear_fit(  # noqa: C901
 
     use_jax = backend == "jax"
     if use_jax:
+        jax, jnp = _import_jax()
+        dtype = jnp.float64 if dtype is None else dtype
         if M is not None:
             M = M.with_xp(jnp)
         if "xp" in inspect.signature(model).parameters:
@@ -757,7 +771,7 @@ def fit_baseline(
     optimizer_options: dict | None = None,
     # --- backend ---
     backend: Literal["numpy", "jax"] = "numpy",
-    dtype=jnp.float64,
+    dtype=None,
 ) -> tuple[np.ndarray, np.ndarray, OptimizeResult, dict]:
     """
     Fit a full fluorescence baseline: slow trend then local fluctuations.
@@ -831,9 +845,9 @@ def fit_baseline(
     backend : {"numpy", "jax"}
         Backend for the trend fit. ``"jax"`` enables autodiff and JIT
         compilation; ``"numpy"`` uses analytic Jacobians when available.
-    dtype : jax dtype
+    dtype : jax dtype, optional
         Floating-point precision for the JAX backend, default
-        ``jnp.float64``. Requires ``jax_enable_x64=True``.
+        ``jnp.float64``.
 
     Returns
     -------
