@@ -30,20 +30,14 @@ structures, making the modules easy to integrate into any pipeline.
 pip install aind-ophys-utils
 ```
 
-> **GPU / CPU note.** `aind-ophys-utils` depends on [PyTorch](https://pytorch.org/),
-> which pulls in CUDA libraries by default from PyPI (~2 GB).  To install a
-> CPU-only build instead, install PyTorch first using the official CPU index, then
-> install this package:
+> **Optional backends.** JAX (`backend="jax"` in `nonlinear_fit`) and PyTorch
+> (`summary_images`, `noise_std(method="fft", device="cuda")`) are optional extras:
+> `pip install aind-ophys-utils[jax]`, `pip install aind-ophys-utils[torch]`.
+> PyPI's Linux PyTorch wheel pulls in CUDA libraries (~2 GB); for a CPU-only
+> build, pass the CPU index:
 >
 > ```bash
-> pip install torch --index-url https://download.pytorch.org/whl/cpu
-> pip install aind-ophys-utils
-> ```
->
-> Alternatively, pass `--extra-index-url` in a single command:
->
-> ```bash
-> pip install aind-ophys-utils --extra-index-url https://download.pytorch.org/whl/cpu
+> pip install "aind-ophys-utils[torch]" --extra-index-url https://download.pytorch.org/whl/cpu
 > ```
 
 To use the software from source, clone the repository and in the root directory run
