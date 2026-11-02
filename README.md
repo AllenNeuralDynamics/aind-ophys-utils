@@ -30,20 +30,23 @@ structures, making the modules easy to integrate into any pipeline.
 pip install aind-ophys-utils
 ```
 
-> **GPU / CPU note.** `aind-ophys-utils` depends on [PyTorch](https://pytorch.org/),
-> which pulls in CUDA libraries by default from PyPI (~2 GB).  To install a
-> CPU-only build instead, install PyTorch first using the official CPU index, then
-> install this package:
+> **Optional backends.** A plain install covers everything except the following,
+> which need an extra:
+>
+> | Extra | Needed for |
+> |---|---|
+> | `jax` | `nonlinear_fit(..., backend="jax")` |
+> | `torch` | `summary_images.local_correlations` / `max_corr_image`, and `noise_std(method="fft", device=...)` on a GPU |
 >
 > ```bash
-> pip install torch --index-url https://download.pytorch.org/whl/cpu
-> pip install aind-ophys-utils
+> pip install "aind-ophys-utils[jax,torch]"
 > ```
 >
-> Alternatively, pass `--extra-index-url` in a single command:
+> PyPI's Linux PyTorch wheel pulls in CUDA libraries (~2 GB). For a CPU-only
+> build, add the CPU index:
 >
 > ```bash
-> pip install aind-ophys-utils --extra-index-url https://download.pytorch.org/whl/cpu
+> pip install "aind-ophys-utils[torch]" --extra-index-url https://download.pytorch.org/whl/cpu
 > ```
 
 To use the software from source, clone the repository and in the root directory run
@@ -53,8 +56,9 @@ pip install -e .
 
 To develop the code in place, run
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
 ```
+`[dev]` includes the `jax` and `torch` extras, so the CPU index flag above applies to it too.
 
 ## Contributing
 
