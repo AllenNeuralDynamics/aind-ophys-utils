@@ -14,10 +14,18 @@ trace = 5 + 3 * np.exp(-t / 20) + np.random.default_rng(0).normal(0, 0.1, t.size
 nonlinear_fit(trace, t, sum_of_exps, x0=np.array([4.0, 2.0, 10.0]))
 for method in ("mad", "welch", "fft"):
     noise_std(trace, method=method)
-assert not {"jax", "torch"} & set(sys.modules), sorted(sys.modules)
+
+from aind_ophys_utils import summary_images
+
+mov = np.random.default_rng(0).normal(size=(60, 8, 8)).astype("float32")
+for image in (summary_images.max_image, summary_images.mean_image, summary_images.var_image):
+    image(mov, batch_size=20)
+summary_images.pnr_image(mov, downscale=1, method="mad")
+summary_images.pnr_image(mov, downscale=1, method="fft")
+assert not {"jax", "torch"} & set(sys.modules), {"jax", "torch"} & set(sys.modules)
 """
 
 
 def test_numpy_paths_do_not_import_jax_or_torch():
-    """Numpy-backend fits and mad/welch/fft noise estimates stay jax- and torch-free."""
+    """Numpy fits, noise estimates and non-correlation summary images stay jax- and torch-free."""
     subprocess.run([sys.executable, "-c", _SCRIPT], check=True)
