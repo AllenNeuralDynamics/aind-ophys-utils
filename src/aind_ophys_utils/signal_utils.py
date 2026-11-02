@@ -6,6 +6,7 @@ from multiprocessing.pool import Pool, ThreadPool
 import numpy as np
 import pandas as pd
 import scipy
+import scipy.fft
 import scipy.ndimage
 from scipy import signal
 
@@ -361,8 +362,8 @@ def noise_std(  # noqa: C901
     n_jobs: int | None
         The number of jobs to run in parallel.
     device: str, optional
-        Torch device for method 'fft' (the only method that needs torch);
-        default is 'cuda' if a GPU is available, else 'cpu'.
+        Torch device for method 'fft', e.g. 'cuda'. By default (None) the FFT
+        runs on the CPU with scipy and torch is not needed.
     skipna: bool
         Exclude NaN values when computing the result. For ``method='mad'``,
         NaN frames are dropped after subtracting the median-filtered baseline.
@@ -465,13 +466,14 @@ def noise_std(  # noqa: C901
                 T = x.shape[-1]
                 if T == 0:
                     return np.nan
-            import torch  # optional: only the fft method needs it
-
+            x32 = x.astype(np.float32)
             if device is None:
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-            x_torch = torch.tensor(x.astype(np.float32), device=device)
-            xdft = torch.fft.rfft(x_torch, axis=-1)
+                xdft = scipy.fft.rfft(x32, axis=-1, workers=-1)
+            else:
+                import torch  # optional: only an explicit device needs it
+
+                xdft = torch.fft.rfft(torch.tensor(x32, device=device), dim=-1).cpu().numpy()
             xdft = xdft[..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))]
-            psd = abs(xdft) ** 2 / T
-            noise = torch.sqrt(torch.mean(psd, -1)).cpu().numpy()
+            psd = np.abs(xdft) ** 2 / T
+            noise = np.sqrt(np.mean(psd, -1))
         return noise.item() if noise.ndim == 0 else noise
