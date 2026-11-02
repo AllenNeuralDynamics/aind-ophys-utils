@@ -19,17 +19,21 @@ dynamic = ["version"]
 dependencies = [
     'h5py>=3.11',
     'imageio-ffmpeg>=0.5',
-    'jax>=0.4.26',
     'matplotlib>=3.9',
     'pandas>=2.2.2',
     'scikit-image>=0.24',
     'scipy>=1.11',
-    'statsmodels>=0.14.2',
-    'torch>=2.3'
+    'statsmodels>=0.14.2'
 ]
 
 [project.optional-dependencies]
+# optional backends: jax for nonlinear_fit(backend="jax"), torch for
+# summary_images and noise_std(method="fft", device=...)
+jax = ['jax>=0.4.26']
+torch = ['torch>=2.3']
 dev = [
+    'jax>=0.4.26',
+    'torch>=2.3',
     'coverage',
     'interrogate',
     'mkdocs',

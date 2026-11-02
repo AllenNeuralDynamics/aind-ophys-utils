@@ -1,0 +1,36 @@
+"""jax and torch are optional: the numpy paths must not import them."""
+
+import subprocess
+import sys
+
+_SCRIPT = """
+import sys
+import numpy as np
+from aind_ophys_utils.baseline_fitting import nonlinear_fit, sum_of_exps
+from aind_ophys_utils.dff import dff
+from aind_ophys_utils.signal_utils import noise_std
+
+t = np.linspace(0, 100, 500)
+trace = 5 + 3 * np.exp(-t / 20) + np.random.default_rng(0).normal(0, 0.1, t.size)
+nonlinear_fit(trace, t, sum_of_exps, x0=np.array([4.0, 2.0, 10.0]))
+for method in ("mad", "welch", "fft"):
+    noise_std(trace, method=method)
+
+for method in ("mad", "welch", "fft"):
+    dff(trace, noise_method=method, fs=5.0)
+    dff(np.stack([trace, trace]), noise_method=method, fs=5.0)
+
+from aind_ophys_utils import summary_images
+
+mov = np.random.default_rng(0).normal(size=(60, 8, 8)).astype("float32")
+for image in (summary_images.max_image, summary_images.mean_image, summary_images.var_image):
+    image(mov, batch_size=20)
+summary_images.pnr_image(mov, downscale=1, method="mad")
+summary_images.pnr_image(mov, downscale=1, method="fft")
+assert not {"jax", "torch"} & set(sys.modules), {"jax", "torch"} & set(sys.modules)
+"""
+
+
+def test_numpy_paths_do_not_import_jax_or_torch():
+    """Numpy fits, noise, dF/F and non-correlation summary images stay jax/torch-free."""
+    subprocess.run([sys.executable, "-c", _SCRIPT], check=True)

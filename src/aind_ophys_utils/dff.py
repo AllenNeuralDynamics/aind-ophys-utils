@@ -81,7 +81,7 @@ def dff(
         )
         tmp = Pool(n_jobs).map(partial_dff, F)
     else:  # faster to use noise_std's parallelization for 'fft' and 'welch'
-        noise = noise_std(F, noise_method, device="cpu")
+        noise = noise_std(F, noise_method)
         partial_dff = partial(
             _dff_single_trace,
             long_filter_length=long_filter_length,
@@ -136,7 +136,7 @@ def _dff_single_trace(
     if invalid:
         return F, F, np.nan
     if isinstance(noise_method, str):
-        noise_sd = noise_std(F, noise_method, filter_length=short_filter_length, device="cpu")
+        noise_sd = noise_std(F, noise_method, filter_length=short_filter_length)
     else:
         noise_sd = noise_method
     # Create trace using inactive frames only, by replacing outliers with nan

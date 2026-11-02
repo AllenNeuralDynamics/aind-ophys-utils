@@ -1,10 +1,13 @@
-"""Summary images for calcium imaging movie data"""
+"""Summary images for calcium imaging movie data
+
+torch is only needed by ``local_correlations`` (and so ``max_corr_image``) and is
+imported on first use; the other summary images are plain numpy.
+"""
 
 from multiprocessing.pool import ThreadPool
 
 import h5py
 import numpy as np
-import torch
 
 from aind_ophys_utils.array_utils import _downsample_array, downsample_array
 from aind_ophys_utils.signal_utils import noise_std
@@ -32,6 +35,8 @@ def nanstd(input, dim=None, correction=1, keepdim=False):
     std: torch.Tensor
         The standard deviation of the input tensor, ignoring NaNs.
     """
+    import torch
+
     mask = ~torch.isnan(input)
     mean = torch.nanmean(input, dim=dim, keepdim=True)
     squared_deviations = torch.square(input - mean) * mask
@@ -44,7 +49,7 @@ def nanstd(input, dim=None, correction=1, keepdim=False):
 def local_correlations(
     mov: np.ndarray,
     eight_neighbours: bool = True,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str | None = None,
     skipna: bool = False,
 ) -> np.ndarray:
     """Computes the correlation image for the input dataset mov
@@ -55,8 +60,8 @@ def local_correlations(
         Input movie data in 3D format.
     eight_neighbours: bool
         Use 8 neighbors if true, and 4 if false.
-    device: str
-        'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    device: str, optional
+        'cuda' or 'cpu'; default is 'cuda' if a GPU is available, else 'cpu'.
     skipna: bool
         Exclude NaN values when computing the result.
 
@@ -65,6 +70,10 @@ def local_correlations(
     rho: ndarray
         Cross-correlation with adjacent pixels.
     """
+    import torch
+
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     Y = torch.tensor(mov, dtype=torch.float32, device=device)
     rho = torch.zeros(Y.shape[1:], device=device)
     mean = torch.nanmean if skipna else torch.mean
@@ -114,7 +123,7 @@ def max_corr_image(
     downscale: int = 10,
     bin_size: int = 50,
     eight_neighbours: bool = True,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str | None = None,
     skipna: bool = False,
     low_memory: bool = False,
 ) -> np.ndarray:
@@ -132,8 +141,8 @@ def max_corr_image(
         Size of each bin (gets adjusted to have rnd(T/bin_size) uniform bins).
     eight_neighbours: bool
         Use 8 neighbors if true, and 4 if false.
-    device: str
-        'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    device: str, optional
+        'cuda' or 'cpu'; default is 'cuda' if a GPU is available, else 'cpu'.
     skipna: bool
         Exclude NaN values when computing the result.
     low_memory: bool
@@ -194,7 +203,7 @@ def pnr_image(
     mov: h5py.Dataset | np.ndarray,
     downscale: int = 10,
     method: str = "welch",
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str | None = None,
     skipna: bool = False,
 ) -> np.ndarray:
     """Computes the peak-to-noise ratio (PNR) image for the input dataset mov
@@ -215,8 +224,9 @@ def pnr_image(
                    power spectral density (PSD) using FFT.
             'welch': Average of the high frequencies of the PSD
                      using Welch's slower but more accurate method.
-    device: str
-        'cuda' or 'cpu', default is 'cuda' if GPU is available.
+    device: str, optional
+        Torch device for method 'fft', e.g. 'cuda'; by default the FFT runs
+        on the CPU with scipy and torch is not needed.
     skipna: bool
         Exclude NaN values when computing the result.
 

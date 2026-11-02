@@ -6,8 +6,8 @@ from multiprocessing.pool import Pool, ThreadPool
 import numpy as np
 import pandas as pd
 import scipy
+import scipy.fft
 import scipy.ndimage
-import torch
 from scipy import signal
 
 
@@ -328,7 +328,7 @@ def noise_std(  # noqa: C901
     filter_length: int = 31,
     axis: int = -1,
     n_jobs: int | None = None,
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str | None = None,
     skipna: bool = False,
 ) -> float | np.ndarray:
     """Estimate the standard deviation of the noise in input(s) `x`.
@@ -361,8 +361,9 @@ def noise_std(  # noqa: C901
         The default is over the last axis (i.e. ``axis=-1``).
     n_jobs: int | None
         The number of jobs to run in parallel.
-    device: str, default is 'cuda' if GPU is available.
-        Device to use when using FFT method; 'cuda' or 'cpu'.
+    device: str, optional
+        Torch device for method 'fft', e.g. 'cuda'. By default (None) the FFT
+        runs on the CPU with scipy and torch is not needed.
     skipna: bool
         Exclude NaN values when computing the result. For ``method='mad'``,
         NaN frames are dropped after subtracting the median-filtered baseline.
@@ -441,7 +442,8 @@ def noise_std(  # noqa: C901
                 res = ThreadPool(n_jobs).map(signal.welch, x)
                 ff = res[0][0]
                 psd = np.array([r[1] for r in res])
-            psd = torch.tensor(psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])]) / 2
+            psd = psd[..., (ff >= noise_range[0]) & (ff <= noise_range[1])] / 2
+            noise = np.sqrt(np.mean(psd, -1))
         else:
             if skipna:
                 if x.ndim > 1:
@@ -464,9 +466,16 @@ def noise_std(  # noqa: C901
                 T = x.shape[-1]
                 if T == 0:
                     return np.nan
-            x_torch = torch.tensor(x.astype(np.float32), device=device)
-            xdft = torch.fft.rfft(x_torch, axis=-1)
-            xdft = xdft[..., slice(*(int(n / 0.5 * len(xdft)) for n in noise_range))]
-            psd = abs(xdft) ** 2 / T
-        noise = torch.sqrt(torch.mean(psd, -1)).cpu()
-        return noise.item() if noise.dim() == 0 else noise.numpy()
+            x32 = x.astype(np.float32)
+            if device is None:
+                xdft = scipy.fft.rfft(x32, axis=-1, workers=-1)
+                band = slice(*(int(n / 0.5 * xdft.shape[-1]) for n in noise_range))
+                noise = np.sqrt(np.mean(np.abs(xdft[..., band]) ** 2 / T, -1))
+            else:
+                import torch  # optional: only an explicit device needs it
+
+                xdft = torch.fft.rfft(torch.tensor(x32, device=device), dim=-1)
+                band = slice(*(int(n / 0.5 * xdft.shape[-1]) for n in noise_range))
+                # reduce on the device; only the final estimates are copied back
+                noise = torch.sqrt(torch.mean(abs(xdft[..., band]) ** 2 / T, -1)).cpu().numpy()
+        return noise.item() if noise.ndim == 0 else noise
