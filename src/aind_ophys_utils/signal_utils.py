@@ -469,11 +469,13 @@ def noise_std(  # noqa: C901
             x32 = x.astype(np.float32)
             if device is None:
                 xdft = scipy.fft.rfft(x32, axis=-1, workers=-1)
+                band = slice(*(int(n / 0.5 * xdft.shape[-1]) for n in noise_range))
+                noise = np.sqrt(np.mean(np.abs(xdft[..., band]) ** 2 / T, -1))
             else:
                 import torch  # optional: only an explicit device needs it
 
-                xdft = torch.fft.rfft(torch.tensor(x32, device=device), dim=-1).cpu().numpy()
-            xdft = xdft[..., slice(*(int(n / 0.5 * xdft.shape[-1]) for n in noise_range))]
-            psd = np.abs(xdft) ** 2 / T
-            noise = np.sqrt(np.mean(psd, -1))
+                xdft = torch.fft.rfft(torch.tensor(x32, device=device), dim=-1)
+                band = slice(*(int(n / 0.5 * xdft.shape[-1]) for n in noise_range))
+                # reduce on the device; only the final estimates are copied back
+                noise = torch.sqrt(torch.mean(abs(xdft[..., band]) ** 2 / T, -1)).cpu().numpy()
         return noise.item() if noise.ndim == 0 else noise

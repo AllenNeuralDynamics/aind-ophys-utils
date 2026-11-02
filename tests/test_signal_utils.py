@@ -242,11 +242,12 @@ def test_noise_std_fft_skipna_all_nan():
     assert np.isnan(noise_std(x, method="fft", skipna=True))
 
 
-def test_noise_std_fft_torch_matches_scipy():
+@pytest.mark.parametrize("shape", [(1000,), (5, 1000)])
+def test_noise_std_fft_torch_matches_scipy(shape):
     """An explicit torch device gives the same result as the default scipy FFT."""
-    x = np.random.default_rng(0).normal(size=(5, 1000))
+    x = np.random.default_rng(0).normal(size=shape)
     np.testing.assert_allclose(
-        noise_std(x[0], method="fft", device="cpu"), noise_std(x[0], method="fft"), rtol=1e-5
+        noise_std(x, method="fft", device="cpu"), noise_std(x, method="fft"), rtol=1e-5
     )
 
 
