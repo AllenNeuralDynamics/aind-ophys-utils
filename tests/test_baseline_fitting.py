@@ -30,80 +30,41 @@ RNG = np.random.default_rng(42)
 # ---------------------------------------------------------------------------
 
 
+def _reference_sum_of_exps(params, t):
+    """Direct evaluation of the documented formula (odd length -> leading b_inf)."""
+    b_inf, pairs = (params[0], params[1:]) if len(params) % 2 else (0.0, params)
+    return b_inf + sum(b * np.exp(-t / tau) for b, tau in zip(pairs[::2], pairs[1::2]))
+
+
+SUM_OF_EXPS_PARAMS = {
+    "single": [10.0, 5.0, 50.0],
+    "double": [10.0, 5.0, 50.0, 3.0, 5.0],
+    "quad_negative_brightening": [100.0, 10.0, 1800.0, 5.0, 60.0, 2.0, 10.0, -20.0, 50.0],
+    "even_no_constant": [5.0, 30.0],
+}
+
+
 class TestSumOfExps:
-    """Exercise sum_of_exps for all three classic cases."""
+    """sum_of_exps against its documented formula, with and without b_inf."""
 
-    def test_single_exp_value(self):
-        """3 params (odd) → b_inf + b*exp(-t/tau)."""
+    @pytest.mark.parametrize("params", SUM_OF_EXPS_PARAMS.values(), ids=SUM_OF_EXPS_PARAMS.keys())
+    def test_value_and_jacobian(self, params):
+        """Value matches the formula; the Jacobian matches finite differences."""
         t = np.linspace(0, 100, 200)
-        params = np.array([10.0, 5.0, 50.0])  # b_inf, b, tau
-        y = sum_of_exps(params, t)
-        expected = 10.0 + 5.0 * np.exp(-t / 50.0)
-        assert np.allclose(y, expected)
-
-    def test_single_exp_jacobian(self):
-        """return_jac=True returns (y, J) of shape (200, 3)."""
-        t = np.linspace(0, 100, 200)
-        params = np.array([10.0, 5.0, 50.0])
+        params = np.array(params)
         y, J = sum_of_exps(params, t, return_jac=True)
-        assert y.shape == (200,)
-        assert J.shape == (200, 3)
-        assert np.allclose(J[:, 0], 1.0)
-        assert np.allclose(J[:, 1], np.exp(-t / 50.0))
-
-    def test_double_exp_value(self):
-        """5 params (odd) → b_inf + b1*exp(-t/tau1) + b2*exp(-t/tau2)."""
-        t = np.linspace(0, 100, 200)
-        # [b_inf, b1, tau1, b2, tau2]
-        params = np.array([10.0, 5.0, 50.0, 3.0, 5.0])
-        y = sum_of_exps(params, t)
-        expected = 10.0 + 5.0 * np.exp(-t / 50.0) + 3.0 * np.exp(-t / 5.0)
+        expected = _reference_sum_of_exps(params, t)
         assert np.allclose(y, expected)
-
-    def test_double_exp_jacobian(self):
-        """return_jac=True returns (y, J) of shape (200, 5)."""
-        t = np.linspace(0, 100, 200)
-        params = np.array([10.0, 5.0, 50.0, 3.0, 5.0])
-        y, J = sum_of_exps(params, t, return_jac=True)
-        assert J.shape == (200, 5)
-
-    def test_quad_exp_value(self):
-        """9 params (odd) → b_inf + 4 exponentials; negative amplitude gives subtraction."""
-        t = np.linspace(0, 100, 100)
-        # [b_inf, b_slow, tau_slow, b_fast, tau_fast,
-        #  b_rapid, tau_rapid, b_bright, tau_bright]
-        # b_bright is negative to represent suppression
-        params = np.array([100.0, 10.0, 1800.0, 5.0, 60.0, 2.0, 10.0, -20.0, 50.0])
-        y = sum_of_exps(params, t)
-        b_inf, b1, tau1, b2, tau2, b3, tau3, b4, tau4 = params
-        expected = (
-            b_inf
-            + b1 * np.exp(-t / tau1)
-            + b2 * np.exp(-t / tau2)
-            + b3 * np.exp(-t / tau3)
-            + b4 * np.exp(-t / tau4)
-        )
-        assert np.allclose(y, expected)
-
-    def test_quad_exp_jacobian(self):
-        """return_jac=True returns a (100, 9) Jacobian for 9-param model."""
-        t = np.linspace(0, 100, 100)
-        params = np.array([100.0, 10.0, 1800.0, 5.0, 60.0, 2.0, 10.0, -20.0, 50.0])
-        y, J = sum_of_exps(params, t, return_jac=True)
-        assert J.shape == (100, 9)
-
-    def test_even_params_no_constant(self):
-        """2 params (even) → no b_inf, just b*exp(-t/tau)."""
-        t = np.linspace(0, 100, 50)
-        params = np.array([5.0, 30.0])  # b, tau
-        y = sum_of_exps(params, t)
-        expected = 5.0 * np.exp(-t / 30.0)
-        assert np.allclose(y, expected)
+        assert np.allclose(sum_of_exps(params, t), expected)
+        assert J.shape == (t.size, params.size)
+        for k in range(params.size):
+            step = np.zeros_like(params)
+            step[k] = 1e-6 * max(1.0, abs(params[k]))
+            fd = (_reference_sum_of_exps(params + step, t) - expected) / step[k]
+            assert np.allclose(J[:, k], fd, rtol=1e-4, atol=1e-6)
 
     def test_jax_backend(self):
         """sum_of_exps traces correctly with xp=jnp."""
-        import jax.numpy as jnp
-
         t = np.linspace(0, 100, 50)
         params = np.array([10.0, 5.0, 50.0])
         y = sum_of_exps(params, jnp.asarray(t), xp=jnp)
