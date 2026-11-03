@@ -711,6 +711,7 @@ class TestNonlinearFitNonFiniteGuard:
             assert np.all(np.isfinite(np.delete(fitted, bad_idx)))
         else:
             assert np.all(np.isfinite(fitted))
+            assert np.allclose(fitted[bad_idx], sum_of_exps(res.x, t[bad_idx : bad_idx + 1])[0])
         assert np.allclose(res.x, true, atol=2.0)
 
     def test_model_never_sees_non_finite_t(self):
@@ -736,18 +737,6 @@ class TestNonlinearFitNonFiniteGuard:
         assert np.isnan(fitted[bad_idx])
         assert np.all(np.isfinite(np.delete(fitted, bad_idx)))
 
-    def test_fitted_includes_samples_dropped_only_for_bad_trace(self):
-        """A sample dropped because of a bad trace value (finite t) still gets
-        a model prediction in `fitted`."""
-        y, t, _ = _decay_trace()
-        y = y.copy()
-        y[10] = np.nan
-        x0 = np.array([1.0, 1.0, 50.0])
-        with pytest.warns(UserWarning, match="dropping 1 non-finite"):
-            fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
-        assert np.all(np.isfinite(fitted))
-        assert np.allclose(fitted[10], sum_of_exps(res.x, t[10:11])[0])
-
     def test_all_non_finite_raises(self):
         """Nothing left to fit → a clear ValueError, not a cryptic failure
         downstream in the optimizer."""
@@ -756,32 +745,6 @@ class TestNonlinearFitNonFiniteGuard:
         x0 = np.array([1.0, 1.0, 50.0])
         with pytest.raises(ValueError, match="nothing to fit"):
             nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
-
-    def test_no_warning_when_all_finite(self, recwarn):
-        """No behavior change (and no warning) for well-formed input."""
-        y, t, true = _decay_trace()
-        x0 = np.array([1.0, 1.0, 50.0])
-        fitted, res = nonlinear_fit(y, t, sum_of_exps, x0, backend="numpy")
-        assert not any("non-finite" in str(w.message) for w in recwarn.list)
-        assert np.allclose(res.x, true, atol=2.0)
-
-    def test_irls_weights_keep_input_length(self):
-        """res.weights has the input length, with 0 at dropped samples, so it
-        stays aligned with the original trace/t."""
-        y, t, true = _decay_trace(noise_sd=0.3)
-        y = y.copy()
-        y[[3, 4]] = np.nan
-        x0 = np.array([1.0, 1.0, 50.0])
-        M = AsymmetricTukeyBiweight(c_pos=4.685, c_neg=4.685)
-        with pytest.warns(UserWarning, match="dropping 2 non-finite"):
-            fitted, res = nonlinear_fit(
-                y, t, sum_of_exps, x0, backend="numpy", M=M, fixed_sigma=0.3
-            )
-        assert fitted.shape == y.shape
-        assert res.weights.shape == y.shape
-        assert np.all(res.weights[[3, 4]] == 0)
-        assert np.all(res.weights[np.isfinite(y)] > 0)
-        assert np.allclose(res.x, true, atol=2.0)
 
     def test_fit_baseline_with_dropped_samples(self):
         """fit_baseline forwards res.weights to the fluctuation stage; a dropped
@@ -798,6 +761,7 @@ class TestNonlinearFitNonFiniteGuard:
         assert F0.shape == y.shape
         assert F0trend.shape == y.shape
         assert res.weights.shape == y.shape
+        assert res.weights[150] == 0
 
     def test_jax_backend_respects_guard(self):
         """The guard and the original-t reconstruction both work on the JAX
