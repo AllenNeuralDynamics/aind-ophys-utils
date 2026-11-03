@@ -724,6 +724,7 @@ class TestNonlinearFitNonFiniteGuard:
         seen = []
 
         def centered_exp(x, t):
+            """Exponential in mean-centered time; records the t it receives."""
             seen.append(np.asarray(t))
             tc = t - np.mean(t)
             return x[0] + x[1] * np.exp(-(tc + 200.0) / x[2])
