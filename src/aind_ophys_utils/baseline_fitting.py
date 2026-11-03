@@ -359,6 +359,11 @@ def nonlinear_fit(  # noqa: C901
     candidate parameter vector, and the optimizer silently lands on a
     degenerate solution (often the parameter bounds) instead of raising or
     warning. A ``UserWarning`` names how many samples were dropped.
+
+    ``fitted`` is evaluated at every sample with a finite ``t``, including
+    those dropped only for a non-finite ``trace`` or ``weights`` value. A
+    model that depends on a global statistic of ``t`` (e.g. ``t - t.mean()``)
+    therefore sees a different ``t`` there than during the fit.
     """
     if optimizer_options is None:
         optimizer_options = {"maxiter": 20000, "ftol": 1e-12, "gtol": 1e-10}
