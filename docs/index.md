@@ -15,7 +15,7 @@ structures, making the modules easy to integrate into any pipeline.
 | `array_utils` | Array downsampling and subsampling with flexible strategies and optional NaN-skipping. |
 | `video_utils` | H5 video downsampling and VP9 encoding via imageio-ffmpeg. |
 | `motion_border_utils` | Compute motion borders from frame-shift correction outputs. |
-| `segmentation_utils` | Reduce per-pixel value maps to per-ROI values. |
+| `segmentation_utils` | Reduce per-pixel value maps to per-ROI values; ROI mask contours, centers of mass and contour plots. |
 
 ## Installation
 
