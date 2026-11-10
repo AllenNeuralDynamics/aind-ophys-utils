@@ -156,7 +156,7 @@ def _resolve_colors(colors, n_masks):
     """Expand a single color to one per mask, or check the length."""
     if matplotlib.colors.is_color_like(colors):
         return [colors] * n_masks
-    if not isinstance(colors, Sequence) or len(colors) != n_masks:
+    if not isinstance(colors, (Sequence, np.ndarray)) or len(colors) != n_masks:
         raise ValueError(f"colors must be one color or one color per mask ({n_masks}).")
     return list(colors)
 

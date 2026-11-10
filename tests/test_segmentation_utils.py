@@ -284,8 +284,15 @@ def test_plot_mask_contours_colors():
     assert [line.get_color() for line in ax.lines] == ["g", "g"]
     ax = plot_mask_contours(_square_stack(), colors=["r", "b", "orange"])
     assert [line.get_color() for line in ax.lines] == ["r", "orange"]
+    ax = plot_mask_contours(_square_stack(), colors=np.array(["r", "b", "orange"]))
+    assert [line.get_color() for line in ax.lines] == ["r", "orange"]
+    rgba = plt.get_cmap("viridis")(np.linspace(0, 1, 3))
+    ax = plot_mask_contours(_square_stack(), colors=rgba)
+    assert [tuple(line.get_color()) for line in ax.lines] == [tuple(rgba[0]), tuple(rgba[2])]
     with pytest.raises(ValueError, match="colors"):
         plot_mask_contours(_square_stack(), colors=["r", "b"])
+    with pytest.raises(ValueError, match="colors"):
+        plot_mask_contours(_square_stack(), colors=np.array(["r", "b"]))
     with pytest.raises(ValueError, match="colors"):
         plot_mask_contours(_square_stack(), colors=5)
 
