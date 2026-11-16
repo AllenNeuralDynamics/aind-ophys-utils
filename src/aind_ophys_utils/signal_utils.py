@@ -23,7 +23,8 @@ def percentile_filter(
 
     Uses :func:`scipy.ndimage.percentile_filter`. When ``skipna=True``, falls
     back to a pandas rolling quantile which ignores NaN values within each
-    window. O(log n) complexity is available in scipy >= 1.15.0.
+    window. O(log n) complexity is available in scipy >= 1.15.0. Otherwise, a
+    window containing a NaN gives NaN.
 
     Parameters
     ----------
@@ -60,6 +61,15 @@ def percentile_filter(
             .quantile(percentile / 100)
             .to_numpy(dtype)[size // 2 : -size // 2]
         )
+    nan_mask = np.isnan(input)
+    if size > 1 and nan_mask.any():
+        # scipy's rank filter doesn't propagate NaN: filter with the NaNs
+        # replaced, then blank every window that contained one.
+        output = scipy.ndimage.percentile_filter(
+            np.where(nan_mask, 0, input), percentile, size, output=dtype
+        )
+        output[scipy.ndimage.maximum_filter(nan_mask.astype(np.uint8), size).astype(bool)] = np.nan
+        return output
     return scipy.ndimage.percentile_filter(input, percentile, size, output=dtype)
 
 

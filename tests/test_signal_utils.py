@@ -62,6 +62,29 @@ def test_median(array, size, expected):
 
 
 @pytest.mark.parametrize(
+    "filter_fn", [lambda x, size: percentile_filter(x, 30, size), median_filter]
+)
+@pytest.mark.parametrize("nan_index", [0, 200])
+@pytest.mark.parametrize("size", [3, 5, 41])
+def test_filters_propagate_nan(filter_fn, nan_index, size):
+    """With skipna=False, exactly the windows containing the NaN are NaN"""
+    x = np.random.default_rng(0).normal(size=400)
+    x[nan_index] = np.nan
+    output = filter_fn(x, size)
+    expected_nan = np.abs(np.arange(400) - nan_index) <= size // 2
+    np.testing.assert_array_equal(np.isnan(output), expected_nan)
+    # windows without the NaN match a NaN-free filter
+    reference = filter_fn(np.nan_to_num(x), size)
+    assert_allclose(output[~expected_nan], reference[~expected_nan])
+
+
+def test_percentile_size_one_keeps_nan():
+    """A size-1 window is the identity, NaN included"""
+    x = np.array([1.0, np.nan, 3.0])
+    np.testing.assert_array_equal(percentile_filter(x, 50, 1), x)
+
+
+@pytest.mark.parametrize(
     "input, size, expected",
     [
         # Equal to median_filter with reflect mode when no nans are present
