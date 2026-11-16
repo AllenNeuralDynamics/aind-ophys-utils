@@ -30,9 +30,6 @@ def get_max_correction_values(
         Maximum shift to allow when considering motion correction. Any
         larger shifts are considered outliers (only absolute value matters).
 
-    For deprecated implementation see:
-    allensdk.internal.brain_observatory.roi_filter_utils.calculate_max_border
-
     Returns
     -------
     MaxFrameShift
@@ -40,6 +37,10 @@ def get_max_correction_values(
         motion correction workflow step. Saved with the following direction
         order [left, right, up, down].
 
+    Notes
+    -----
+    For deprecated implementation see:
+    allensdk.internal.brain_observatory.roi_filter_utils.calculate_max_border
     """
     # take abs of max shift as we are considering both positive and negative
     # directions

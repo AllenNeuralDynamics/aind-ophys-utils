@@ -20,21 +20,22 @@ def downsample_h5_video(
 
     Parameters
     ----------
-        video_path: pathlib.Path
-            path to an h5 video. Should have dataset 'data'. For video,
-            assumes dimensions [time, height, width] and downsampling
-            applies to time.
-        input_fps: float
-            frames-per-second of the input array
-        output_fps: float
-            frames-per-second of the output array
-        strategy: str
-            downsampling strategy. 'max', 'mean', 'median',
-            'first', 'last', 'mid'.
+    video_path: pathlib.Path
+        path to an h5 video. Should have dataset 'data'. For video,
+        assumes dimensions [time, height, width] and downsampling
+        applies to time.
+    input_fps: float
+        frames-per-second of the input array
+    output_fps: float
+        frames-per-second of the output array
+    strategy: str
+        downsampling strategy. 'max', 'mean', 'median',
+        'first', 'last', 'mid'.
 
-    Returns:
-        video_out: numpy.ndarray
-            array downsampled along axis=0
+    Returns
+    -------
+    video_out: numpy.ndarray
+        array downsampled along axis=0
     """
     with h5py.File(video_path, "r") as h5f:
         video_out = downsample_array(h5f["data"], input_fps, output_fps, strategy=strategy)
