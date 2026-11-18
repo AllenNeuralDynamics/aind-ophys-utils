@@ -1,8 +1,10 @@
 """Tests dff"""
 
+import warnings
 from itertools import product
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal
@@ -43,8 +45,6 @@ class TestPlotDff:
     )
     def test_render_paths(self, with_trend, zoom):
         """plot_dff returns a figure for every mode × inset combination."""
-        import matplotlib.pyplot as plt
-
         F, F0, F0trend, t = self._data()
         fig = plot_dff(
             F,
@@ -55,6 +55,62 @@ class TestPlotDff:
             roi_id=42 if with_trend else None,
         )
         assert fig is not None
+        plt.close("all")
+
+    @pytest.mark.parametrize(
+        "kwargs, expected",
+        [
+            ({"roi_id": "003"}, "cell_roi_id: 3"),
+            ({"roi_id": "fiber 0"}, "cell_roi_id: fiber 0"),
+            ({"roi_id": 3, "title": "green, fiber 0"}, "green, fiber 0"),
+        ],
+    )
+    def test_title(self, kwargs, expected):
+        """``roi_id`` takes any label; ``title`` replaces it."""
+        F, F0, _, t = self._data()
+        fig = plot_dff(F, F0, t, **kwargs)
+        assert fig.axes[0].get_title() == expected
+        plt.close("all")
+
+    def test_time_axis(self):
+        """Limits follow ``t`` (offset, with NaN) and labels use ``time_unit``."""
+        F, F0, _, t = self._data()
+        t = t + 1000
+        t[-5:] = np.nan  # trailing frames without timestamps
+        fig = plot_dff(F, F0, t, zoom_duration=20.0, time_unit="min")
+        tmin, tmax = np.nanmin(t), np.nanmax(t)
+        margin = 0.01 * (tmax - tmin)
+        assert fig.axes[0].get_xlim() == pytest.approx((tmin - margin, tmax + margin))
+        assert any(ax.get_xlabel() == "Time [min]" for ax in fig.axes)
+        assert "First 20min" in [ax.get_title() for ax in fig.axes]
+        plt.close("all")
+
+    def test_insets(self):
+        """No insets when the zoom covers the trace; an all-NaN window doesn't warn."""
+        F, F0, _, t = self._data()
+        assert len(plot_dff(F, F0, t, zoom_duration=200.0).axes) == 2
+        F[t < 20] = np.nan
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            plot_dff(F, F0, t, zoom_duration=20.0)
+        plt.close("all")
+
+    def test_color(self):
+        """``color`` sets the F and dF/F lines."""
+        F, F0, _, t = self._data()
+        fig = plot_dff(F, F0, t, zoom_duration=None, color="#009E73")
+        assert {fig.axes[0].lines[0].get_color(), fig.axes[1].lines[0].get_color()} == {"#009E73"}
+        plt.close("all")
+
+    @pytest.mark.parametrize("with_trend, panel", [(False, 1), (True, 3)])
+    def test_dff_argument(self, with_trend, panel):
+        """``dff`` replaces the dF/F against ``F0`` and leaves the trend dF/F alone."""
+        F, F0, F0trend, t = self._data()
+        custom = np.linspace(0.0, 1.0, t.size)
+        fig = plot_dff(F, F0, t, F0trend if with_trend else None, zoom_duration=None, dff=custom)
+        np.testing.assert_allclose(fig.axes[panel].lines[0].get_ydata(), 100 * custom)
+        if with_trend:
+            np.testing.assert_allclose(fig.axes[2].lines[0].get_ydata(), 100 * (F / F0trend - 1))
         plt.close("all")
 
 

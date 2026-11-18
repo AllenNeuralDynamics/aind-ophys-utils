@@ -153,7 +153,7 @@ def _dff_single_trace(
     return dff, baseline, noise_sd
 
 
-def add_zoom_insets(ax_spacer, ax_dff, t, dff_trace, zoom_windows, color):
+def add_zoom_insets(ax_spacer, ax_dff, t, dff_trace, zoom_windows, color, time_unit="s"):
     """Attach three zoomed inset axes to *ax_spacer* and mark them on *ax_dff*."""
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
@@ -174,13 +174,13 @@ def add_zoom_insets(ax_spacer, ax_dff, t, dff_trace, zoom_windows, color):
             inset_ax.axhline(0, c="k", ls="--")
             inset_ax.grid(True, alpha=0.8)
             inset_ax.set_xlim(start_time, end_time)
-            if len(dff_zoom) > 0:
-                mi, ma = np.nanmin(dff_zoom), np.nanmax(dff_zoom)
+            finite = dff_zoom[np.isfinite(dff_zoom)]
+            if finite.size:
+                mi, ma = finite.min(), finite.max()
                 y_margin = 0.1 * (ma - mi)
-                if ~np.isnan(y_margin):
-                    inset_ax.set_ylim(mi - y_margin, ma + y_margin)
+                inset_ax.set_ylim(mi - y_margin, ma + y_margin)
             inset_ax.set_title(
-                f"{['First', 'Middle', 'Last'][j]} {end_time - start_time:.0f}s",
+                f"{['First', 'Middle', 'Last'][j]} {end_time - start_time:g}{time_unit}",
                 fontsize=10,
                 y=0.94,
             )
@@ -206,6 +206,10 @@ def plot_dff(
     F0trend: np.ndarray | None = None,
     zoom_duration: float = 60.0,
     roi_id=None,
+    title: str | None = None,
+    time_unit: str = "s",
+    color: str | None = None,
+    dff: np.ndarray | None = None,
 ):
     """Plot raw fluorescence alongside the fitted baseline(s) and dF/F.
 
@@ -226,17 +230,29 @@ def plot_dff(
     F0 : np.ndarray
         Fitted baseline, shape ``(N,)``.
     t : np.ndarray
-        Timestamps, shape ``(N,)``.  Pass ``np.arange(len(F)) / frame_rate``
-        to use seconds; ``zoom_duration`` must be in the same units.
+        Timestamps, shape ``(N,)``, in ``time_unit``. They need not start
+        at 0 and may contain NaN.
     F0trend : np.ndarray or None
         Parametric trend component, shape ``(N,)``. When provided, an
         extra panel showing the fluctuation residuals is added and both
         trend-only and full dF/F are plotted.
     zoom_duration : float or None
-        Duration (same units as ``t``) for each zoomed inset window.
-        Pass ``None`` or ``0`` to disable insets.
+        Duration (in the unit of ``t``) of each inset window. ``None``, ``0``
+        or a value of at least the trace length disables the insets.
     roi_id : int or str or None
-        Region-of-interest identifier added to the figure title.
+        ROI identifier, shown in the title as ``cell_roi_id: <roi_id>``.
+    title : str or None
+        Figure title; replaces the ``roi_id`` title.
+    time_unit : str
+        Unit of ``t`` and ``zoom_duration``, used in the axis label and inset
+        titles. Only a label, nothing is converted.
+    color : str or None
+        Color of ``F`` and of the dF/F against ``F0``, e.g. one per channel.
+        Default: the matplotlib cycle colors.
+    dff : np.ndarray or None
+        dF/F (as a fraction, shape ``(N,)``) to plot instead of
+        ``F / F0 - 1``, e.g. when the denominator differs. In full-baseline
+        mode it replaces the dF/F against ``F0`` only.
 
     Returns
     -------
@@ -246,14 +262,16 @@ def plot_dff(
     import matplotlib.pyplot as plt
 
     has_fluctuations = F0trend is not None
-    show_insets = bool(zoom_duration) and zoom_duration > 0
+    tmin, tmax = np.nanmin(t), np.nanmax(t)
+    t_total = tmax - tmin
+    show_insets = bool(zoom_duration) and 0 < zoom_duration < t_total
 
     # layout: [raw, (fluctuations), (spacer), dff, ...] repeated for each dff trace
     n_rows = (6 if show_insets else 4) if has_fluctuations else (3 if show_insets else 2)
     fig, ax = plt.subplots(n_rows, 1, figsize=(12, n_rows * 1.1), sharex=True)
 
     # panel 0: raw signal + baseline(s)
-    ax[0].plot(t, F, label="F", lw=0.5)
+    ax[0].plot(t, F, label="F", lw=0.5, c=color)
     if has_fluctuations:
         ax[0].plot(t, F0trend, c="C3", label=r"$\mathrm{F}_{0,\mathrm{trend}}$")
     ax[0].plot(t, F0, c="#F0E442", label=r"$\mathrm{F}_0$")
@@ -282,6 +300,7 @@ def plot_dff(
         legend.get_frame().set_linewidth(0.0)
 
     # dF/F panels: one per baseline when has_fluctuations, otherwise just F0
+    dff_full = F / F0 - 1 if dff is None else dff
     dff_traces = (
         [
             (
@@ -289,23 +308,22 @@ def plot_dff(
                 "C1",
                 r"$\Delta\mathrm{F}/\mathrm{F}_{0,\mathrm{trend}}$",
             ),
-            (F / F0 - 1, "C2", r"$\Delta\mathrm{F}/\mathrm{F}_0$"),
+            (dff_full, color or "C2", r"$\Delta\mathrm{F}/\mathrm{F}$"),
         ]
         if has_fluctuations
-        else [(F / F0 - 1, "C2", r"$\Delta\mathrm{F}/\mathrm{F}_0$")]
+        else [(dff_full, color or "C2", r"$\Delta\mathrm{F}/\mathrm{F}$")]
     )
     # row layout per trace: [spacer, dff_panel] when insets, else [dff_panel]
     first_dff_row = 2 if has_fluctuations else 1
     zoom_windows = None
     if show_insets:
-        t_total = t[-1] - t[0]
         zoom_windows = [
-            (t[0], t[0] + zoom_duration),
+            (tmin, tmin + zoom_duration),
             (
-                t[0] + (t_total - zoom_duration) / 2,
-                t[0] + (t_total + zoom_duration) / 2,
+                tmin + (t_total - zoom_duration) / 2,
+                tmin + (t_total + zoom_duration) / 2,
             ),
-            (max(t[-1] - zoom_duration, t[0]), t[-1]),
+            (max(tmax - zoom_duration, tmin), tmax),
         ]
 
     for i, (dff_trace, color, label) in enumerate(dff_traces):
@@ -317,11 +335,19 @@ def plot_dff(
         legend = ax[dff_row].legend(loc="upper right", ncol=1, borderpad=0.05, borderaxespad=0.3)
         legend.get_frame().set_linewidth(0.0)
         if show_insets:
-            add_zoom_insets(ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color)
+            add_zoom_insets(
+                ax[spacer_row], ax[dff_row], t, dff_trace, zoom_windows, color, time_unit
+            )
 
-    ax[-1].set_xlim(-0.01 * t[-1], 1.01 * t[-1])
-    ax[-1].set_xlabel("Time [s]")
-    if roi_id is not None:
-        ax[0].set_title(f"cell_roi_id: {int(roi_id)}")
-    plt.subplots_adjust(hspace=0.1, top=0.97, left=0.06, right=0.995)
+    ax[-1].set_xlim(tmin - 0.01 * t_total, tmax + 0.01 * t_total)
+    ax[-1].set_xlabel(f"Time [{time_unit}]")
+    if title is not None:
+        ax[0].set_title(title)
+    elif roi_id is not None:
+        try:
+            roi_id = int(roi_id)  # numeric ids, also zero-padded strings, print as integers
+        except ValueError:
+            pass
+        ax[0].set_title(f"cell_roi_id: {roi_id}")
+    fig.subplots_adjust(hspace=0.1, top=0.97, left=0.06, right=0.995)
     return fig
